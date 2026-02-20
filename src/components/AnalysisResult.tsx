@@ -19,7 +19,7 @@ function riskColor(risk: string) {
 
 export function AnalysisResult({ data }: Props) {
   const riskLevel =
-    data.escalation_risk >= 70 ? "high" : data.escalation_risk >= 40 ? "medium" : "low";
+    data.escalationRisk >= 70 ? "high" : data.escalationRisk >= 40 ? "medium" : "low";
 
   return (
     <div className="rounded-2xl border border-accent bg-white p-8 shadow-card-elevated sm:p-10">
@@ -34,12 +34,12 @@ export function AnalysisResult({ data }: Props) {
           </p>
           <div className="mt-3 flex items-baseline gap-4">
             <span className="text-3xl font-bold text-heading sm:text-4xl">
-              {data.escalation_risk}%
+              {data.escalationRisk}%
             </span>
             <div
               className="h-2 flex-1 max-w-[200px] overflow-hidden rounded-full bg-accent"
               role="progressbar"
-              aria-valuenow={data.escalation_risk}
+              aria-valuenow={data.escalationRisk}
               aria-valuemin={0}
               aria-valuemax={100}
             >
@@ -51,7 +51,7 @@ export function AnalysisResult({ data }: Props) {
                       ? "bg-risk-medium"
                       : "bg-risk-low"
                 }`}
-                style={{ width: `${data.escalation_risk}%` }}
+                style={{ width: `${data.escalationRisk}%` }}
               />
             </div>
           </div>
@@ -61,28 +61,28 @@ export function AnalysisResult({ data }: Props) {
           <p className="text-sm font-semibold uppercase tracking-wide text-subtitle">
             Complaint risk
           </p>
-          <p className={`mt-2 font-semibold ${riskColor(data.complaint_risk)}`}>
-            {data.complaint_risk}
+          <p className={`mt-2 font-semibold ${riskColor(data.complaintLevel)}`}>
+            {data.complaintLevel}
           </p>
         </div>
 
-        {data.deescalation_response && (
+        {data.suggestedResponse && (
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-subtitle">
               Suggested response
             </p>
             <p className="mt-2 rounded-xl bg-accent/50 px-4 py-3.5 text-base text-heading italic">
-              {data.deescalation_response}
+              {data.suggestedResponse}
             </p>
           </div>
         )}
 
-        {data.tone_guidance && (
+        {data.summary && (
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-subtitle">
               Tone guidance
             </p>
-            <p className="mt-2 text-base text-heading">{data.tone_guidance}</p>
+            <p className="mt-2 text-base text-heading">{data.summary}</p>
           </div>
         )}
       </div>

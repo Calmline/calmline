@@ -94,7 +94,7 @@ export async function GET() {
       const current = maxLevelByCall.get(e.call_id) ?? 0;
       if (rank > current) maxLevelByCall.set(e.call_id, rank);
     }
-    const highOrCriticalCalls = [...maxLevelByCall.values()].filter(
+    const highOrCriticalCalls = Array.from(maxLevelByCall.values()).filter(
       (r) => r >= 3
     ).length;
     const escalationRate =
@@ -145,7 +145,7 @@ export async function GET() {
         triggerCounts.set(s, (triggerCounts.get(s) ?? 0) + 1);
       }
     }
-    const topTriggers = [...triggerCounts.entries()]
+    const topTriggers = Array.from(triggerCounts.entries())
       .map(([trigger, count]) => ({ trigger, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);

@@ -33,7 +33,7 @@ function clusterPhrases(
   phraseCounts: Map<string, number>
 ): { canonical: string; phrases: string[]; count: number }[] {
   const byNorm = new Map<string, { phrases: Set<string>; count: number }>();
-  for (const [phrase, count] of phraseCounts) {
+  for (const [phrase, count] of Array.from(phraseCounts.entries())) {
     const n = normalizePhrase(phrase);
     if (!n) continue;
     const existing = byNorm.get(n);

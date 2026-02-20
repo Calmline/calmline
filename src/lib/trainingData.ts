@@ -62,7 +62,7 @@ export async function getTrainingExamples(
   if (eventsError) throw eventsError;
   const eventList = (events ?? []) as CallEventRow[];
 
-  const uniqueCallIds = [...new Set(eventList.map((e) => e.call_id))];
+  const uniqueCallIds = Array.from(new Set(eventList.map((e) => e.call_id)));
   const outcomesMap = new Map<string, { supervisor_requested: boolean; recorded_at: string }>();
 
   if (uniqueCallIds.length > 0) {
