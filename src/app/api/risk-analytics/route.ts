@@ -94,7 +94,7 @@ export async function GET() {
       const current = maxLevelByCall.get(e.call_id) ?? 0;
       if (rank > current) maxLevelByCall.set(e.call_id, rank);
     }
-    const highOrCriticalCalls = Array.from(maxLevelByCall.values()).filter(
+    const highOrCriticalCalls = Array.from(maxLevelByCall.values()).filter((r) => r >= 3).length;
       (r) => r >= 3
     ).length;
     const escalationRate =
