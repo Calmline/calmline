@@ -94,11 +94,16 @@ export async function GET() {
       const current = maxLevelByCall.get(e.call_id) ?? 0;
       if (rank > current) maxLevelByCall.set(e.call_id, rank);
     }
-    const highOrCriticalCalls = Array.from(maxLevelByCall.values()).filter((r) => r >= 3).length;
-      (r) => r >= 3
-    ).length;
+    const levelsArray = Array.from(maxLevelByCall.values());
+
+    const highOrCriticalCalls = levelsArray.filter((level) => {
+      return level >= 3;
+    }).length;
+
     const escalationRate =
-      totalCalls > 0 ? (100 * highOrCriticalCalls) / totalCalls : 0;
+      totalCalls > 0
+        ? (100 * highOrCriticalCalls) / totalCalls
+        : 0;
 
     const sumEsc = events.reduce((a, e) => a + (e.rolling_escalation_risk ?? 0), 0);
     const sumCompl = events.reduce((a, e) => a + (e.rolling_complaint_risk ?? 0), 0);
