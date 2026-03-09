@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-
 type CallSession = {
   id: string;
   session_id: string | null;
@@ -28,7 +27,6 @@ function formatDate(s: string | null): string {
 
 export default function HistoryDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params?.id as string | undefined;
   const [session, setSession] = useState<CallSession | null>(null);
   const [loading, setLoading] = useState(true);

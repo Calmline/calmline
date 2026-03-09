@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getTrainingExamples } from "@/lib/trainingData";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/training-data
  * Query: since (ISO date), limit (number), only_with_outcome (default true)

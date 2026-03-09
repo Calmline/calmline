@@ -2,15 +2,17 @@ import React from "react";
 
 const iconProps = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none" as const };
 
-function withIcon(
+const withIcon = (
   fn: (props: React.SVGProps<SVGSVGElement>) => React.ReactNode,
-) {
-  return (props: React.SVGProps<SVGSVGElement>) => (
+) => {
+  const IconComponent = (props: React.SVGProps<SVGSVGElement>) => (
     <svg {...iconProps} {...props}>
       {fn(props)}
     </svg>
   );
-}
+  IconComponent.displayName = "Icon";
+  return IconComponent;
+};
 
 export const IconSearch = withIcon(() => (
   <>

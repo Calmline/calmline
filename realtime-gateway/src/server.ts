@@ -32,7 +32,7 @@ function broadcastToUI(type: string, payload: Record<string, unknown> = {}): voi
 
   console.log(`[ui] broadcast type=${type} clients=${uiClients.size}`);
 
-  for (const ws of uiClients) {
+  uiClients.forEach((ws) => {
     if (ws.readyState === WebSocket.OPEN) {
       try {
         ws.send(message);
@@ -45,7 +45,7 @@ function broadcastToUI(type: string, payload: Record<string, unknown> = {}): voi
     } else {
       console.log("[ui] skipped client (not OPEN)");
     }
-  }
+  });
 }
 
 const ROLLING_TRANSCRIPT_MAX = 1200;
@@ -384,7 +384,7 @@ function runServer(): void {
 
   setInterval(() => {
     const toRemove: WebSocket[] = [];
-    for (const ws of uiClients) {
+    uiClients.forEach((ws) => {
       const alive = (ws as WebSocket & { isAlive?: boolean }).isAlive;
       if (alive === false) {
         toRemove.push(ws);
@@ -392,7 +392,7 @@ function runServer(): void {
         (ws as WebSocket & { isAlive?: boolean }).isAlive = false;
         ws.ping();
       }
-    }
+    });
     for (const ws of toRemove) {
       uiClients.delete(ws);
       console.log(

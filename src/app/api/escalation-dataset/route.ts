@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { buildEscalationDataset } from "@/lib/aggregate-escalations";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/escalation-dataset
  * Returns structured JSON summary of escalation pattern frequency

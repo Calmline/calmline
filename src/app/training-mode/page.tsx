@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { jsPDF } from "jspdf";
 
@@ -261,7 +261,7 @@ function downloadTrainingReport(session: TrainingSession) {
   doc.save(`calmline-training-report-${safeId}.pdf`);
 }
 
-export default function TrainingModePage() {
+function TrainingModeContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const sessionIdParam = searchParams.get("sessionId");
@@ -580,6 +580,14 @@ export default function TrainingModePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TrainingModePage() {
+  return (
+    <Suspense fallback={null}>
+      <TrainingModeContent />
+    </Suspense>
   );
 }
 
