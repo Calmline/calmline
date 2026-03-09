@@ -53,6 +53,21 @@ export function toUrgencyLevel(
   }
 }
 
+function normalizeUrgencyLevel(
+  urgencyLevel: unknown,
+  fallbackEscalationLevel: EscalationLevel
+): "low" | "medium" | "high" | "critical" {
+  if (typeof urgencyLevel !== "string" || !urgencyLevel.trim()) {
+    return toUrgencyLevel(fallbackEscalationLevel);
+  }
+  const lower = urgencyLevel.trim().toLowerCase();
+  if (lower === "critical") return "critical";
+  if (lower === "high") return "high";
+  if (lower === "medium" || lower === "moderate") return "medium";
+  if (lower === "low") return "low";
+  return "low";
+}
+
 /**
  * Log a structured call event for live sessions. Use with a stable callId
  * per session to reconstruct full escalation trajectories later.
@@ -79,7 +94,7 @@ export async function insertCallEvent(event: CallEventInsert): Promise<{ id: str
     tactical_guidance: event.tacticalGuidance ?? null,
     response_latency_ms: event.responseLatencyMs ?? null,
     escalation_level: escalationLevel,
-    urgency_level: event.urgencyLevel ?? toUrgencyLevel(escalationLevel),
+    urgency_level: normalizeUrgencyLevel(event.urgencyLevel, escalationLevel),
   };
 
   const { data, error } = await supabase

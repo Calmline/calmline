@@ -34,6 +34,8 @@ Full-stack AI SaaS for live transcript de-escalation analysis. Accepts transcrip
    - `supabase/migrations/001_create_transcripts.sql`
    - `supabase/migrations/002_create_call_events.sql`
    - `supabase/migrations/003_create_call_outcomes.sql`
+   - `supabase/migrations/004_create_policy_chunks.sql` (requires pgvector extension)
+   - `supabase/migrations/005_add_policies_raw_text.sql`
 
 4. **Run the app**
 
@@ -43,8 +45,19 @@ Full-stack AI SaaS for live transcript de-escalation analysis. Accepts transcrip
 
    Open [http://localhost:3000](http://localhost:3000).
 
+## Troubleshooting
+
+- **Repeated `GET /_next/static/...` 404s** — Usually a stale chunk cache. Restart the dev server; if it persists, remove the build cache and restart:
+  ```bash
+  rm -rf .next
+  npm run dev
+  ```
+  Or run `npm run dev:clean` to do both in one step. Then hard-refresh the browser (e.g. Cmd+Shift+R / Ctrl+Shift+R) so it doesn’t use old chunk names.
+
 ## API
 
+- **POST /api/policies/upload** — Body: `{ "text": "...", "name": "Document name" }`. Chunks and embeds policy text, stores in `policy_chunks`. Used by the Policies admin page.
+- **GET /api/policies/retrieve** — Query: `?q=<query>`. Vector search for top 5 policy chunks. Called by realtime-gateway before coaching.
 - **POST /api/analyze** — Body: `{ "transcript": "..." }`. Optional: `callId`, `speaker`, `twilio_call_sid`, `twilio_contact_id`. Returns analysis; stores in `transcripts` and (when `callId` present) in `call_events`.
 - **GET /api/transcripts** — Returns recent transcript records.
 - **POST /api/calls/[callId]/outcome** — Body: `{ "supervisor_requested": true|false, "source": "manual"|"crm"|"integration"|"twilio" }`. Records call outcome for fine-tuning (upsert by `callId`).

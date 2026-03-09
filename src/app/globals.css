@@ -3,69 +3,163 @@
 @tailwind utilities;
 
 :root {
-  --background: #F6F4EF;
-  --foreground: #2B2B2B;
-  --accent: #EAE3D6;
-  --muted: #6B6B6B;
+  --cl-bg-0: #ffffff;
+  --cl-bg-1: #ffffff;
+  --cl-card: #ffffff;
+  --cl-card-2: #ffffff;
+  --cl-border: #e2e8f0;
+  --cl-text: #0f172a;
+  --cl-muted: #475569;
+
+  --cl-espresso: #292524;
+  --cl-sand: #faf7f2;
+  --cl-primary: #292524;
+  --cl-accent: #faf7f2;
+  --cl-warn: #0f172a;
+  --cl-danger: #dc2626;
+  --cl-success: #16a34a;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: #0f172a;
+  background: #ffffff;
+  min-height: 100vh;
+}
+
+body::before {
+  content: none;
 }
 
 @keyframes script-appear {
   0% {
-    opacity: 0.85;
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.25);
+    opacity: 0.96;
   }
   100% {
     opacity: 1;
-    box-shadow: 0 0 0 8px transparent;
   }
 }
 
 .animate-script-appear {
-  animation: script-appear 0.7s ease-out;
+  animation: script-appear 0.4s ease-out;
+}
+
+@keyframes glow-ring-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.98; }
+}
+
+.animate-glow-ring-pulse {
+  animation: glow-ring-pulse 1.5s ease-in-out;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    #e7e5e4 25%,
+    #f5f5f4 50%,
+    #e7e5e4 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
 }
 
 @keyframes listening-dot {
-  0%,
-  80%,
-  100% {
-    opacity: 0.4;
-  }
-  40% {
-    opacity: 1;
-  }
+  0%, 80%, 100% { opacity: 0.4; }
+  40% { opacity: 1; }
 }
 
 .listening-dots span {
   animation: listening-dot 1.4s ease-in-out infinite;
 }
-.listening-dots span:nth-child(1) {
-  animation-delay: 0s;
+.listening-dots span:nth-child(1) { animation-delay: 0s; }
+.listening-dots span:nth-child(2) { animation-delay: 0.2s; }
+.listening-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* Card — white, slate border, soft shadow */
+.cl-glass-card,
+.cl-glass-card-2,
+.cl-premium-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  border-radius: 0.75rem;
+  transition: all 200ms ease-out;
 }
-.listening-dots span:nth-child(2) {
-  animation-delay: 0.2s;
+.cl-glass-card:hover,
+.cl-glass-card-2:hover,
+.cl-premium-card:hover {
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.08);
 }
-.listening-dots span:nth-child(3) {
-  animation-delay: 0.4s;
+
+/* Focus ring — subtle slate */
+.focus-ring:focus,
+.focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px white, 0 0 0 4px rgb(148 163 184 / 0.4);
+}
+
+.btn-press:active {
+  transform: scale(0.98);
+}
+
+/* Primary button — espresso */
+.btn-primary {
+  height: 2.5rem;
+  padding: 0 1rem;
+  font-weight: 500;
+  border-radius: 0.75rem;
+  transition: all 200ms ease-out;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+.btn-primary:hover {
+  box-shadow: 0 2px 4px -1px rgb(0 0 0 / 0.08);
+}
+.btn-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px white, 0 0 0 4px rgb(148 163 184 / 0.4);
+}
+
+/* Secondary button — sand */
+.btn-secondary {
+  height: 2.5rem;
+  padding: 0 1rem;
+  font-weight: 500;
+  border-radius: 0.75rem;
+  transition: all 200ms ease-out;
+}
+.btn-secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px white, 0 0 0 4px rgb(148 163 184 / 0.4);
 }
 
 .sidebar-item {
-  display: block;
-  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--foreground);
-  transition: background-color 0.15s ease;
+  color: #475569;
+  transition: all 200ms ease-out;
 }
 .sidebar-item:hover {
-  background-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: #f8fafc;
+  color: #0f172a;
 }
 .sidebar-item.active {
-  background-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  font-weight: 700;
+  background: rgba(15, 118, 110, 0.1);
+  color: #0F766E;
+  font-weight: 500;
+}
+.sidebar-item .shrink-0 {
+  opacity: 0.8;
+}
+.sidebar-item.active .shrink-0 {
+  opacity: 1;
 }

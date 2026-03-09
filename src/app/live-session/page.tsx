@@ -1,409 +1,557 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import { TranscriptForm } from "@/components/TranscriptForm";
-import { GuidancePanel } from "@/components/GuidancePanel";
-import type { AnalysisData } from "@/lib/analyze";
-import {
-  getRollingContext,
-  getLastCompleteCustomerSentence,
-  hasUrgentKeywords,
-  ROLLING_CUSTOMER_UTTERANCES,
-} from "@/lib/liveContext";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useAppStatus } from "@/context/AppStatusContext";
 
-const ANALYSIS_TARGET_LATENCY_MS = 2000;
-const DEBOUNCE_MS = 400;
+type CustomerProfile = {
+  id: string;
+  phone_number: string | null;
+  email: string | null;
+  total_calls: number | null;
+  total_escalations: number | null;
+  common_issues: string | null;
+  last_interaction: string | null;
+  created_at: string;
+};
 
-/** WebSocket base URL for Twilio voice stream (e.g. wss://your-domain or ws://localhost:3001). */
-const WS_BASE_URL =
-  typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3001").replace(/^http/, "ws")
-    : "ws://localhost:3001";
-
-const RECONNECT_DELAYS = [1000, 2000, 4000];
-const MAX_RECONNECT_ATTEMPTS = 5;
-
-export default function LiveSessionPage() {
-  const [transcript, setTranscript] = useState("");
-  const [result, setResult] = useState<AnalysisData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isLive, setIsLive] = useState(false);
-  const [sessionEnded, setSessionEnded] = useState(false);
-  const [wsStatus, setWsStatus] = useState<"idle" | "connecting" | "connected" | "reconnecting" | "failed">("idle");
-  const [wsRetryKey, setWsRetryKey] = useState(0);
-  const transcriptRef = useRef(transcript);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectAttemptRef = useRef(0);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastAnalyzedCustomerSentenceRef = useRef<string | null>(null);
-  const lastAnalyzedContextRef = useRef<string>("");
-  const analysisInFlightRef = useRef(false);
-  const lastLatencyMsRef = useRef<number | null>(null);
-  const lastEscalationRiskRef = useRef<number | null>(null);
-  const callIdRef = useRef<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isLiveRef = useRef(isLive);
-  transcriptRef.current = transcript;
-  isLiveRef.current = isLive;
-
-  const riskLevel = result?.escalationLevel ?? null;
-
-  const runAnalysis = useCallback(
-    async (
-      transcriptText: string,
-      options?: {
-        callId?: string | null;
-        speaker?: "agent" | "customer";
-        signal?: AbortSignal;
-        regenerate?: boolean;
-      }
-    ) => {
-      const start = performance.now();
-      const signal = options?.signal;
-      analysisInFlightRef.current = true;
-      setLoading(true);
-      setError(null);
-      try {
-        const transcriptionReadyAt = Date.now();
-        const body: Record<string, unknown> = {
-          transcript: transcriptText,
-          transcriptionReadyAt,
-        };
-        if (options?.callId) body.callId = options.callId;
-        if (options?.speaker) body.speaker = options.speaker;
-        if (options?.regenerate) body.regenerate = true;
-        const res = await fetch("/api/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          signal: signal ?? undefined,
-        });
-        if (signal?.aborted) {
-          setLoading(false);
-          return;
-        }
-        let data: unknown;
-        try {
-          data = await res.json();
-        } catch {
-          data = null;
-        }
-        if (signal?.aborted) {
-          setLoading(false);
-          return;
-        }
-        console.log(res.status, data);
-        if (res.status === 200) {
-          if (data && typeof data === "object" && data !== null) {
-            const analysisData = data as AnalysisData;
-            setResult(analysisData);
-            lastEscalationRiskRef.current = analysisData.escalationRisk ?? null;
-          }
-          setError(null);
-          const latencyMs = performance.now() - start;
-          lastLatencyMsRef.current = latencyMs;
-          console.log(
-            "[Calmline] Analysis latency:",
-            Math.round(latencyMs),
-            "ms"
-          );
-          if (latencyMs > ANALYSIS_TARGET_LATENCY_MS) {
-            console.warn(
-              "[Calmline] Analysis exceeded",
-              ANALYSIS_TARGET_LATENCY_MS,
-              "ms target:",
-              Math.round(latencyMs),
-              "ms"
-            );
-          }
-        } else {
-          const message =
-            typeof (data as { error?: string })?.error === "string"
-              ? (data as { error: string }).error
-              : "Analysis failed";
-          setError(message);
-        }
-      } catch (e) {
-        if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
-          setLoading(false);
-          return;
-        }
-        setError(e instanceof Error ? e.message : "Something went wrong");
-      } finally {
-        setLoading(false);
-        analysisInFlightRef.current = false;
-      }
-    },
-    []
+function LiveIndicatorBar({
+  status,
+  tone,
+  risk,
+}: {
+  status: string;
+  tone: string;
+  risk: string;
+}) {
+  return (
+    <div className="mb-6 flex w-full items-center justify-between rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              status === "Connected" || status === "Listening" ? "animate-pulse bg-[#22C7C9]" : "bg-slate-300"
+            }`}
+          />
+          <span className="text-sm font-medium" style={{ color: "#1E293B" }}>
+            {status}
+          </span>
+        </div>
+        <div className="text-sm" style={{ color: "#64748B" }}>
+          Tone: <span className="font-medium" style={{ color: "#1E293B" }}>{tone}</span>
+        </div>
+        <div className="text-sm" style={{ color: "#64748B" }}>
+          Escalation Risk: <span className="font-medium" style={{ color: "#1E293B" }}>{risk}</span>
+        </div>
+      </div>
+      <div className="text-sm" style={{ color: "#64748B" }}>
+        Calmline AI monitoring conversation
+      </div>
+    </div>
   );
+}
 
-  const onStartLive = useCallback(() => {
-    setError(null);
-    setResult(null);
-    setSessionEnded(false);
-    callIdRef.current = crypto.randomUUID();
-    setIsLive(true);
-  }, []);
+function CustomerInsight({
+  phoneNumber,
+  profile,
+  loading,
+  error,
+}: {
+  phoneNumber: string | null;
+  profile: CustomerProfile | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  const previousCalls =
+    profile && typeof profile.total_calls === "number"
+      ? Math.max(0, profile.total_calls - 1)
+      : 0;
+  const totalEscalations = profile?.total_escalations ?? 0;
+  const commonIssue =
+    (profile?.common_issues && profile.common_issues.trim()) || "Not enough data yet.";
 
-  const onStopLive = useCallback(() => {
-    setIsLive(false);
-    setSessionEnded(true);
-  }, []);
-
-  // Twilio Voice: connect to session WebSocket when live; receive transcript and append to state.
-  useEffect(() => {
-    if (!isLive) {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      reconnectAttemptRef.current = 0;
-      setWsStatus("idle");
-      return;
+  let lastInteractionLabel = "No previous interactions";
+  if (profile?.last_interaction) {
+    const raw = profile.last_interaction;
+    const ts = Date.parse(raw);
+    if (!Number.isNaN(ts)) {
+      lastInteractionLabel = new Date(ts).toLocaleString();
+    } else {
+      lastInteractionLabel = raw;
     }
-
-    const url = `${WS_BASE_URL}/ws/session`;
-    setWsStatus("connecting");
-
-    function connect() {
-      const ws = new WebSocket(url);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        reconnectAttemptRef.current = 0;
-        setWsStatus("connected");
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data as string);
-          if (data.type === "transcript" && typeof data.text === "string") {
-            setTranscript((prev) => {
-              const next = prev.trim() ? `${prev.trim()}\n${data.text}` : data.text;
-              return next;
-            });
-          }
-        } catch {
-          // ignore non-JSON or parse errors
-        }
-      };
-
-      ws.onclose = () => {
-        wsRef.current = null;
-        if (!isLiveRef.current) return;
-        const attempt = reconnectAttemptRef.current;
-        if (attempt >= MAX_RECONNECT_ATTEMPTS) {
-          setWsStatus("failed");
-          return;
-        }
-        const delay = RECONNECT_DELAYS[Math.min(attempt, RECONNECT_DELAYS.length - 1)];
-        setWsStatus("reconnecting");
-        reconnectTimerRef.current = setTimeout(() => {
-          reconnectTimerRef.current = null;
-          reconnectAttemptRef.current = attempt + 1;
-          connect();
-        }, delay);
-      };
-
-      ws.onerror = () => {
-        // Close will fire after error; reconnect handled there.
-      };
-    }
-
-    connect();
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-    };
-  }, [isLive, wsRetryKey]);
-
-  const onRetryWs = useCallback(() => {
-    reconnectAttemptRef.current = 0;
-    setWsStatus("connecting");
-    setWsRetryKey((k) => k + 1);
-  }, []);
-
-  // Debounced analysis: typing updates transcript immediately; API runs after 400ms idle.
-  useEffect(() => {
-    if (isLive) return;
-    const trimmed = transcript.trim();
-    if (!trimmed) {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
-      }
-      return;
-    }
-    debounceTimerRef.current = setTimeout(() => {
-      debounceTimerRef.current = null;
-      abortControllerRef.current?.abort();
-      abortControllerRef.current = new AbortController();
-      runAnalysis(trimmed, { signal: abortControllerRef.current.signal });
-    }, DEBOUNCE_MS);
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
-      }
-    };
-  }, [transcript, isLive, runAnalysis]);
-
-  // Live mode: run coaching only when isLive === true.
-  const tryRunLiveAnalysis = useCallback(() => {
-    if (!isLiveRef.current || analysisInFlightRef.current) return;
-    const fullTranscript = transcriptRef.current;
-    const rollingContext = getRollingContext(
-      fullTranscript,
-      ROLLING_CUSTOMER_UTTERANCES
-    );
-    if (!rollingContext.trim()) return;
-
-    const lastCompleteSentence = getLastCompleteCustomerSentence(fullTranscript);
-    const sentenceTrigger =
-      lastCompleteSentence != null &&
-      lastCompleteSentence !== lastAnalyzedCustomerSentenceRef.current;
-    const hasUrgent = hasUrgentKeywords(fullTranscript);
-    const urgentTrigger =
-      hasUrgent &&
-      (lastAnalyzedContextRef.current === "" ||
-        !hasUrgentKeywords(lastAnalyzedContextRef.current) ||
-        rollingContext !== lastAnalyzedContextRef.current);
-
-    if (!sentenceTrigger && !urgentTrigger) return;
-
-    console.log("Running live analysis");
-    analysisInFlightRef.current = true;
-    setLoading(true);
-    setError(null);
-    runAnalysis(rollingContext, {
-      callId: callIdRef.current ?? undefined,
-    })
-      .then(() => {
-        lastAnalyzedCustomerSentenceRef.current = lastCompleteSentence;
-        lastAnalyzedContextRef.current = rollingContext;
-        analysisInFlightRef.current = false;
-        setLoading(false);
-        if (isLiveRef.current) tryRunLiveAnalysis();
-      })
-      .catch(() => {
-        analysisInFlightRef.current = false;
-        setLoading(false);
-      });
-  }, [runAnalysis]);
-
-  useEffect(() => {
-    console.log("isLive:", isLive);
-    if (!isLive) {
-      lastAnalyzedCustomerSentenceRef.current = null;
-      lastAnalyzedContextRef.current = "";
-      lastEscalationRiskRef.current = null;
-      return;
-    }
-    tryRunLiveAnalysis();
-  }, [isLive, transcript, tryRunLiveAnalysis]);
-
-  const onRegenerate = useCallback(() => {
-    const t = transcriptRef.current.trim();
-    if (!t) return;
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = new AbortController();
-    runAnalysis(t, {
-      regenerate: true,
-      signal: abortControllerRef.current.signal,
-    });
-  }, [runAnalysis]);
+  }
 
   return (
-    <div className="text-left">
-      <div className="mx-auto max-w-6xl px-6 py-8 sm:px-8 sm:py-10">
-        <section className="text-left">
-          <p className="max-w-2xl text-lg text-neutral-600">
-            Real-Time Escalation Prevention for Customer Support Teams
-          </p>
-        </section>
-
-        {error && (
-          <div
-            className="mt-6 rounded-xl border border-red-200 bg-red-50/80 px-5 py-4 text-base text-red-800 shadow-sm"
-            role="alert"
-          >
-            {error}
+    <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)] mb-4">
+      <h2 className="mb-3 text-base font-semibold" style={{ color: "#1E293B" }}>
+        Customer Insight
+      </h2>
+      {!phoneNumber ? (
+        <p className="text-sm" style={{ color: "#64748B" }}>
+          Waiting for caller details…
+        </p>
+      ) : loading ? (
+        <p className="text-sm" style={{ color: "#64748B" }}>
+          Loading customer history…
+        </p>
+      ) : error ? (
+        <p className="text-sm" style={{ color: "#B91C1C" }}>
+          {error}
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "#64748B" }}>
+              Caller Phone Number
+            </p>
+            <p className="mt-1 text-sm font-medium" style={{ color: "#1E293B" }}>
+              {phoneNumber}
+            </p>
           </div>
-        )}
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "#64748B" }}>
+              Previous Calls
+            </p>
+            <p className="mt-1 text-sm font-medium" style={{ color: "#1E293B" }}>
+              {previousCalls}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "#64748B" }}>
+              Total Escalations
+            </p>
+            <p className="mt-1 text-sm font-medium" style={{ color: "#1E293B" }}>
+              {totalEscalations}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "#64748B" }}>
+              Common Issue
+            </p>
+            <p className="mt-1 text-sm font-medium" style={{ color: "#1E293B" }}>
+              {commonIssue}
+            </p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "#64748B" }}>
+              Last Interaction
+            </p>
+            <p className="mt-1 text-sm font-medium" style={{ color: "#1E293B" }}>
+              {lastInteractionLabel}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-        {isLive && wsStatus !== "idle" && (
-          <div
-            className="mt-6 flex items-center gap-2 rounded-xl border border-accent bg-white px-4 py-2 text-sm"
-            role="status"
-            aria-live="polite"
+export default function LiveSessionPage() {
+  const [transcriptLines, setTranscriptLines] = useState<string[]>([]);
+  const [coachText, setCoachText] = useState("");
+  const [riskLevel, setRiskLevel] = useState<string | null>(null);
+  const [riskSignals, setRiskSignals] = useState<string[]>([]);
+  const [conversationState, setConversationState] = useState<string | null>(null);
+  const [toneAnalysis, setToneAnalysis] = useState<string | null>(null);
+  const [callTone, setCallTone] = useState("Neutral");
+  const [risk, setRisk] = useState("Low");
+  const [aiThinking, setAiThinking] = useState(false);
+  const [highlightNewResponse, setHighlightNewResponse] = useState(false);
+  const [responseLocked, setResponseLocked] = useState(false);
+  const [coachStatus, setCoachStatus] = useState("Listening");
+  const responseLockedRef = useRef(false);
+  const lastResponseTimeRef = useRef(0);
+  const wsRef = useRef<WebSocket | null>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const sessionStartedRef = useRef(false);
+  const { setConnection, setSession, connection, session } = useAppStatus();
+
+  type SessionPhase = "idle" | "armed" | "active" | "ended";
+  const [sessionPhase, setSessionPhase] = useState<SessionPhase>("idle");
+  const [sessionTranscript, setSessionTranscript] = useState<string[]>([]);
+  const [aiResponses, setAiResponses] = useState<string[]>([]);
+  const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [callerNumber, setCallerNumber] = useState<string | null>(null);
+  const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [customerError, setCustomerError] = useState<string | null>(null);
+  const isActiveCall = sessionPhase === "active";
+  const sessionStatusDisplay =
+    sessionPhase === "idle"
+      ? "Ready to start session"
+      : sessionPhase === "armed"
+        ? "Waiting for live call…"
+        : sessionPhase === "active"
+          ? "Call in progress"
+          : "Session ended";
+  const statusDisplay =
+    sessionPhase === "active"
+      ? "Connected"
+      : sessionPhase === "armed"
+        ? "Connecting..."
+        : "Ended";
+
+  const ensureCustomerProfile = useCallback(async (phone: string) => {
+    try {
+      setCustomerLoading(true);
+      setCustomerError(null);
+      const res = await fetch("/api/customer-profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone_number: phone }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          (body as { error?: string }).error ?? `HTTP ${res.status}`,
+        );
+      }
+      const data = (await res.json()) as CustomerProfile;
+      setCustomerProfile(data);
+    } catch (err) {
+      console.error("[live-session] customer profile error", err);
+      setCustomerError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load customer profile",
+      );
+    } finally {
+      setCustomerLoading(false);
+    }
+  }, []);
+
+  const startSession = useCallback(() => {
+    setTranscriptLines([]);
+    setSessionTranscript([]);
+    setAiResponses([]);
+    setCoachText("");
+    setAiThinking(false);
+    setCoachStatus("Listening");
+    responseLockedRef.current = false;
+    setResponseLocked(false);
+    lastResponseTimeRef.current = 0;
+    setRiskLevel(null);
+    setRiskSignals([]);
+    setConversationState(null);
+    sessionStartedRef.current = true;
+    setCallerNumber(null);
+    setCustomerProfile(null);
+    setCustomerError(null);
+    setSessionStartTime(Date.now());
+    setSessionId(typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}`);
+    setSessionPhase("armed");
+    setConnection("connecting");
+    setSession("listening");
+  }, [setSession, setConnection]);
+
+  const endSession = useCallback(async () => {
+    sessionStartedRef.current = false;
+
+    const duration =
+      sessionStartTime != null ? Math.floor((Date.now() - sessionStartTime) / 1000) : 0;
+    const transcript = sessionTranscript.length > 0 ? sessionTranscript.join("\n") : transcriptLines.join("\n");
+    const aiResponse = aiResponses.join("\n");
+    const tone = conversationState || callTone;
+    const escalationRisk = riskLevel || risk;
+
+    try {
+      await fetch("/api/call-history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          transcript,
+          ai_response: aiResponse,
+          tone,
+          escalation_risk: escalationRisk,
+          call_duration: duration,
+          ended_at: new Date().toISOString(),
+        }),
+      });
+    } catch (err) {
+      console.error("[live-session] failed to save call history:", err);
+    }
+
+    setSessionTranscript([]);
+    setTranscriptLines([]);
+    setAiResponses([]);
+    setCoachText("");
+    setAiThinking(false);
+    setSessionStartTime(null);
+    setSessionId(null);
+    setCallerNumber(null);
+    setCustomerProfile(null);
+    setCustomerError(null);
+    setSessionPhase("ended");
+    setConnection("disconnected");
+    setSession("idle");
+  }, [
+    setSession,
+    setConnection,
+    sessionStartTime,
+    sessionTranscript,
+    transcriptLines,
+    aiResponses,
+    conversationState,
+    callTone,
+    riskLevel,
+    risk,
+    sessionId,
+  ]);
+
+  useEffect(() => {
+    const socket = new WebSocket("ws://localhost:8787/ui");
+
+    socket.onopen = () => {
+      console.log("Connected to realtime gateway");
+    };
+
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      console.log("WS message:", data);
+
+      if (data.type === "call_state") {
+        setSessionPhase("active");
+        setConnection("connected");
+        if (typeof data.from === "string" && data.from.trim().length > 0) {
+          setCallerNumber((prev) => prev ?? data.from);
+        }
+      }
+
+      if (data.type === "transcript" && data.text) {
+        const line = typeof data.text === "string" ? data.text : String(data.text);
+        setTranscriptLines((prev) => [...prev, line]);
+        setSessionTranscript((prev) => [...prev, line]);
+      }
+
+      if (data.type === "conversation_state") {
+        if (data.transcript && Array.isArray(data.transcript)) {
+          setTranscriptLines(data.transcript);
+          setSessionTranscript(data.transcript);
+        }
+      }
+
+      if (data.type === "coach_final" || data.type === "coach") {
+        const text = data.message || data.text;
+        if (text) {
+          const response = typeof text === "string" ? text : String(text);
+          setCoachText(response);
+          setAiResponses((prev) => [...prev, response]);
+        }
+      }
+    };
+
+    socket.onerror = (err) => {
+      console.error("WebSocket error:", err);
+    };
+
+    socket.onclose = () => {
+      console.log("WebSocket closed");
+    };
+
+    return () => socket.close();
+  }, []);
+
+  useEffect(() => {
+    if (!callerNumber) return;
+    void ensureCustomerProfile(callerNumber);
+  }, [callerNumber, ensureCustomerProfile]);
+
+  useEffect(() => {
+    if (transcriptRef.current) {
+      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+    }
+  }, [transcriptLines]);
+
+  return (
+    <div className="space-y-6 p-6 -m-8 -mb-0" style={{ background: "#F7F9FB", minHeight: "100vh" }}>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold" style={{ color: "#1E293B" }}>Live Session</h1>
+        {sessionPhase === "armed" && (
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+            style={{ background: "rgba(245,158,11,0.15)", color: "#B45309" }}
           >
             <span
-              className={`h-2 w-2 rounded-full ${
-                wsStatus === "connected"
-                  ? "bg-green-600"
-                  : wsStatus === "reconnecting" || wsStatus === "connecting"
-                    ? "bg-amber-500 animate-pulse"
-                    : "bg-red-500"
-              }`}
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: "#F59E0B" }}
             />
-            {wsStatus === "connected" && "Call stream connected — transcript will appear as you speak."}
-            {(wsStatus === "connecting" || wsStatus === "reconnecting") && "Connecting to call stream…"}
-            {wsStatus === "failed" && (
-              <span className="flex items-center gap-2">
-                Connection failed. Check that the WebSocket server is running.
-                <button
-                  type="button"
-                  onClick={onRetryWs}
-                  className="rounded-lg border border-charcoal bg-white px-2 py-1 text-xs font-medium text-heading hover:bg-charcoal hover:text-white"
+            Connecting...
+          </span>
+        )}
+        {sessionPhase === "active" && (
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+            style={{ background: "rgba(34,199,201,0.15)", color: "#0F766E" }}
+          >
+            <span
+              className="h-1.5 w-1.5 rounded-full animate-pulse"
+              style={{ background: "#22C7C9" }}
+            />
+            Connected
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex gap-4">
+          <button
+            onClick={startSession}
+            className="rounded-lg px-[18px] py-2.5 font-semibold text-white transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-2"
+            style={{ background: "#0F766E" }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = "#0B5E58";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = "#0F766E";
+            }}
+          >
+            Start Live Session
+          </button>
+          <button
+            onClick={endSession}
+            className="rounded-lg px-[18px] py-2.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
+            style={{ background: "#E5E7EB", color: "#1E293B" }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = "#D1D5DB";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = "#E5E7EB";
+            }}
+          >
+            End Session
+          </button>
+        </div>
+        <div className="text-sm" style={{ color: "#64748B" }}>{sessionStatusDisplay}</div>
+      </div>
+
+      <LiveIndicatorBar
+        status={statusDisplay}
+        tone={isActiveCall ? (conversationState || callTone) : "-"}
+        risk={isActiveCall ? (riskLevel || risk) : "-"}
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-2">
+          <CustomerInsight
+            phoneNumber={callerNumber}
+            profile={customerProfile}
+            loading={customerLoading}
+            error={customerError}
+          />
+          <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-sm">
+            <h2 className="mb-4 text-base font-semibold" style={{ color: "#1E293B" }}>
+              Conversation Transcript
+            </h2>
+            <div
+              ref={transcriptRef}
+              className="h-96 overflow-y-auto rounded-lg border border-[#E2E8F0] p-4 scroll-smooth text-sm transcript-panel"
+              style={{ color: "#1E293B" }}
+            >
+              {transcriptLines.length === 0 ? (
+                <p style={{ color: "#64748B" }}>
+                  {sessionPhase === "idle"
+                    ? "Start a live session to begin transcription."
+                    : sessionPhase === "armed"
+                      ? "Waiting for live call…"
+                      : sessionPhase === "ended"
+                        ? "Session ended. Start a new session to continue."
+                        : connection === "connected"
+                          ? "Listening for conversation…"
+                          : "Connect to the gateway to see the transcript."}
+                </p>
+              ) : (
+                <div className="transcript-box">
+                  {transcriptLines.map((line, i) => (
+                    <div key={i}>{line}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-3 rounded-xl border border-[#E2E8F0] bg-white p-8 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-1 h-5 bg-slate-400 rounded"></div>
+            <h3 className="text-slate-700 text-base font-semibold tracking-normal">
+              Suggested Response
+            </h3>
+          </div>
+          <div
+            className={`min-h-96 flex flex-col rounded-lg p-1 transition-all duration-300 ${highlightNewResponse ? "bg-slate-50" : ""}`}
+          >
+            <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">
+              AI Suggested Response
+            </div>
+            <div className="flex-1 flex items-center justify-center overflow-y-auto">
+              {sessionPhase === "ended" || sessionPhase === "idle" ? null : coachText ? (
+                <p
+                  className="text-center w-full"
+                  style={{ fontSize: "22px", lineHeight: 1.6, fontWeight: 500, color: "#1E293B" }}
                 >
-                  Retry
-                </button>
-              </span>
+                  &ldquo;{coachText}&rdquo;
+                </p>
+              ) : aiThinking ? (
+                <p style={{ color: "#94A3B8", fontSize: "18px" }}>
+                  AI analyzing conversation...
+                  <span className="ml-2 animate-pulse">...</span>
+                </p>
+              ) : (
+                <p style={{ color: "#94A3B8", fontSize: "18px" }}>
+                  AI is listening to the conversation...
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
+          <h2 className="mb-3 text-base font-semibold" style={{ color: "#1E293B" }}>
+            Risk Overview
+          </h2>
+          <div className="space-y-2">
+            <p
+              className="text-lg font-medium"
+              style={{
+                color:
+                  riskLevel === "HIGH"
+                    ? "#B91C1C"
+                    : riskLevel === "MEDIUM"
+                      ? "#B45309"
+                      : riskLevel === "LOW"
+                        ? "#0F766E"
+                        : "#64748B",
+              }}
+            >
+              {riskLevel ?? "—"}
+            </p>
+            {riskSignals.length > 0 && (
+              <ul className="list-inside list-disc text-sm" style={{ color: "#64748B" }}>
+                {riskSignals.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            )}
+            {!riskLevel && (
+              <p className="text-sm" style={{ color: "#64748B" }}>
+                Escalation risk will update as the call progresses.
+              </p>
             )}
           </div>
-        )}
+        </div>
 
-        <div className="mt-10 flex flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-0">
-          <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm lg:w-[35%] lg:max-w-md lg:p-8">
-            <TranscriptForm
-              transcript={transcript}
-              setTranscript={setTranscript}
-              loading={loading}
-              isLive={isLive}
-              sessionEnded={sessionEnded}
-              onStartLive={onStartLive}
-              onStopLive={onStopLive}
-              riskLevel={riskLevel}
-              result={result}
-              onGenerateCallSummary={transcript.trim() ? () => runAnalysis(transcript.trim()) : undefined}
-              onGenerateEscalationNotes={transcript.trim() ? () => runAnalysis(transcript.trim()) : undefined}
-            />
-          </div>
-          <div className="hidden items-center justify-center lg:flex lg:w-8 lg:shrink-0" aria-hidden>
-            <span className="text-neutral-300" aria-hidden="true">
-              →
-            </span>
-          </div>
-          <div className="min-h-[320px] flex-1 lg:min-w-0">
-            <GuidancePanel
-              data={result}
-              loading={loading}
-              isLive={isLive}
-              onRegenerate={transcript.trim() ? onRegenerate : undefined}
-            />
-          </div>
+        <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
+          <h2 className="mb-3 text-base font-semibold" style={{ color: "#1E293B" }}>
+            Tone Analysis
+          </h2>
+          <p style={{ color: "#1E293B" }}>
+            {conversationState
+              ? `Conversation state: ${conversationState}`
+              : toneAnalysis ?? "Tone analysis will appear as the call progresses."}
+          </p>
         </div>
       </div>
     </div>

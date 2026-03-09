@@ -1,19 +1,21 @@
 import { NextResponse } from "next/server";
 
 /**
- * Twilio Voice webhook: returns TwiML to start a Media Stream to our WebSocket.
- * Configure this URL in Twilio Console: Phone Numbers → your number → Voice & Fax → A CALL COMES IN → Webhook → https://your-domain/api/twilio/voice
+ * Twilio Voice webhook: returns TwiML to start a Media Stream to realtime-gateway.
+ * Stream must be wss://<PUBLIC_HOST>/twilio/media so Twilio can reach the gateway (no localhost).
+ * Configure in Twilio: Phone Numbers → your number → Voice → Webhook → https://your-domain/api/twilio/voice
  */
 export async function POST(request: Request) {
-  const baseUrl = process.env.NEXT_PUBLIC_WS_URL || process.env.TWILIO_WS_BASE_URL;
-  const wsAudioUrl = baseUrl
-    ? `${baseUrl.replace(/^http/, "ws")}/ws/audio`
-    : "wss://your-domain/ws/audio";
+  const baseUrl = process.env.TWILIO_WS_BASE_URL || process.env.NEXT_PUBLIC_WS_URL;
+  const streamUrl = baseUrl
+    ? `${baseUrl.replace(/^http/, "ws").replace(/\/$/, "")}/twilio/media`
+    : "wss://your-domain/twilio/media";
+  console.log("[twilio/voice] Stream URL (exact):", streamUrl);
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Start>
-    <Stream url="${wsAudioUrl}" />
+    <Stream url="${streamUrl}" />
   </Start>
   <Say>Connecting to Calmline test session.</Say>
 </Response>`;
