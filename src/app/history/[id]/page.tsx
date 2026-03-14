@@ -33,7 +33,7 @@ export default function HistoryDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    fetch("/api/call-history")
+    fetch("/api/call-history", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         const list = Array.isArray(data?.sessions) ? data.sessions : [];

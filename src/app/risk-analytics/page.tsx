@@ -28,7 +28,7 @@ export default function RiskAnalyticsPage() {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch("/api/risk-analytics");
+        const res = await fetch("/api/risk-analytics", { cache: "no-store" });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(

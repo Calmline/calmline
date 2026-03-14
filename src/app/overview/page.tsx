@@ -23,45 +23,58 @@ type CallHistoryRow = {
 export default function OverviewPage() {
   const [todayCount, setTodayCount] = useState(0);
   const [riskAvertedCount, setRiskAvertedCount] = useState(0);
-  const [calmScore, setCalmScore] = useState(100);
-  const [avgLatency, setAvgLatency] = useState(1.1);
+  const [calmScore, setCalmScore] = useState<number | null>(null);
+  const [avgLatency, setAvgLatency] = useState<number | null>(null);
   const [insight, setInsight] = useState("");
   const [aiInsight, setAiInsight] = useState("");
   const [aiSaves, setAiSaves] = useState(0);
   const [escalationForecast, setEscalationForecast] = useState<"Low" | "Rising" | "High">("Low");
+  const [hasFetched, setHasFetched] = useState(false);
 
   const fetchDashboardMetrics = useCallback(async () => {
     try {
-      const res = await fetch("/api/call-history");
-      if (!res.ok) return;
-      const data: CallHistoryRow[] = await res.json();
+      const res = await fetch("/api/call-history", { cache: "no-store" });
+      if (!res.ok) {
+        setHasFetched(true);
+        setInsight("Could not load metrics.");
+        setCalmScore(null);
+        setAvgLatency(null);
+        return;
+      }
+      const raw = await res.json();
+      const data: CallHistoryRow[] = Array.isArray(raw) ? raw : (raw?.sessions ?? []);
+      setHasFetched(true);
 
+      const sessions = data ?? [];
       const today = new Date().toISOString().slice(0, 10);
-      const todaysSessions = (data ?? []).filter((session) =>
+      const todaysSessions = sessions.filter((session) =>
         (session.created_at || "").startsWith(today)
       );
       setTodayCount(todaysSessions.length);
 
-      const riskAverted = (data ?? []).filter(
+      const riskAverted = sessions.filter(
         (s) => (s.escalation_risk || "").toLowerCase() !== "high"
       );
       setRiskAvertedCount(riskAverted.length);
 
-      let score = 100;
-      (data ?? []).forEach((session) => {
-        const risk = (session.escalation_risk || "").toLowerCase();
-        if (risk === "high") score -= 12;
-        if (risk === "medium") score -= 6;
-      });
-      if (score < 0) score = 0;
-      setCalmScore(score);
+      if (sessions.length === 0) {
+        setCalmScore(null);
+        setAvgLatency(null);
+      } else {
+        let score = 100;
+        sessions.forEach((session) => {
+          const risk = (session.escalation_risk || "").toLowerCase();
+          if (risk === "high") score -= 12;
+          if (risk === "medium") score -= 6;
+        });
+        if (score < 0) score = 0;
+        setCalmScore(score);
 
-      const responseTimes = (data ?? []).map((s) => s.call_duration || 0);
-      const avgResponse =
-        responseTimes.reduce((a, b) => a + b, 0) / (responseTimes.length || 1);
-      setAvgLatency(
-        responseTimes.length ? Math.round(avgResponse * 10) / 10 : 1.1
-      );
+        const responseTimes = sessions.map((s) => s.call_duration || 0);
+        const avgResponse =
+          responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length;
+        setAvgLatency(Math.round(avgResponse * 10) / 10);
+      }
 
       const triggers = {
         billing: 0,
@@ -71,7 +84,7 @@ export default function OverviewPage() {
         complaint: 0,
         delay: 0,
       };
-      (data ?? []).forEach((session) => {
+      sessions.forEach((session) => {
         const text = (session.transcript || "").toLowerCase();
         if (text.includes("billing")) triggers.billing++;
         if (text.includes("refund")) triggers.refund++;
@@ -82,7 +95,7 @@ export default function OverviewPage() {
       });
 
       let saves = 0;
-      (data ?? []).forEach((session) => {
+      sessions.forEach((session) => {
         const risk = (session.escalation_risk || "").toLowerCase();
         if (risk === "medium" && session.ai_response) saves++;
       });
@@ -94,29 +107,37 @@ export default function OverviewPage() {
       setEscalationForecast(forecast);
 
       let insightText = "";
-      const { billing, refund, cancel, manager } = triggers;
-      if (billing > refund && billing > cancel) {
-        insightText =
-          "Billing disputes are currently the most common escalation trigger across recent calls.";
-      } else if (refund > billing) {
-        insightText =
-          "Refund requests are driving the majority of escalation risk.";
-      } else if (manager > 0) {
-        insightText =
-          "Customers are requesting managers more frequently during current sessions.";
+      if (sessions.length === 0) {
+        insightText = "No call data yet. Complete a live session to see insights.";
       } else {
-        insightText =
-          "Customer sentiment across active sessions appears stable.";
+        const { billing, refund, cancel, manager } = triggers;
+        if (billing > refund && billing > cancel) {
+          insightText =
+            "Billing disputes are currently the most common escalation trigger across recent calls.";
+        } else if (refund > billing) {
+          insightText =
+            "Refund requests are driving the majority of escalation risk.";
+        } else if (manager > 0) {
+          insightText =
+            "Customers are requesting managers more frequently during current sessions.";
+        } else {
+          insightText =
+            "Customer sentiment across recent calls appears stable.";
+        }
       }
       setInsight(insightText);
 
       const aiInsightText =
-        "Calmline AI responses helped de-escalate " +
-        saves +
-        " conversations.";
+        sessions.length === 0
+          ? ""
+          : "Calmline AI responses helped de-escalate " + saves + " conversations.";
       setAiInsight(aiInsightText);
     } catch (err) {
       console.error("[overview] fetch metrics error:", err);
+      setHasFetched(true);
+      setInsight("Could not load metrics.");
+      setCalmScore(null);
+      setAvgLatency(null);
     }
   }, []);
 
@@ -141,13 +162,13 @@ export default function OverviewPage() {
     },
     {
       label: "Calm Score",
-      value: `${calmScore} / 100`,
+      value: calmScore != null ? `${calmScore} / 100` : "—",
       sub: "escalation outcomes",
       Icon: Heart,
     },
     {
       label: "AI Response Speed",
-      value: `${avgLatency}s`,
+      value: avgLatency != null ? `${avgLatency}s` : "—",
       sub: "suggestion speed",
       Icon: Gauge,
     },
@@ -190,10 +211,10 @@ export default function OverviewPage() {
           Calmline Intelligence
         </h2>
         <p className="text-sm text-slate-700">
-          {insight || "Loading…"}
+          {hasFetched ? (insight || "No insights yet.") : "Loading…"}
         </p>
         <p className="mt-2 text-sm text-slate-700">
-          {aiInsight || ""}
+          {hasFetched ? (aiInsight || "No AI de-escalation data yet.") : "Loading…"}
         </p>
       </div>
     </div>

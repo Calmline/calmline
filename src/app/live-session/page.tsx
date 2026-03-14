@@ -161,6 +161,8 @@ export default function LiveSessionPage() {
   const responseLockedRef = useRef(false);
   const lastResponseTimeRef = useRef(0);
   const wsRef = useRef<WebSocket | null>(null);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const sessionStartedRef = useRef(false);
   const { setConnection, setSession, connection, session } = useAppStatus();
@@ -189,7 +191,9 @@ export default function LiveSessionPage() {
       ? "Connected"
       : sessionPhase === "armed"
         ? "Connecting..."
-        : "Ended";
+        : sessionPhase === "idle"
+          ? "Ready"
+          : "Ended";
 
   const ensureCustomerProfile = useCallback(async (phone: string) => {
     try {
@@ -254,22 +258,40 @@ export default function LiveSessionPage() {
     const tone = conversationState || callTone;
     const escalationRisk = riskLevel || risk;
 
+    const payload = {
+      session_id: sessionId,
+      transcript,
+      ai_response: aiResponse,
+      tone,
+      escalation_risk: escalationRisk,
+      call_duration: duration,
+      ended_at: new Date().toISOString(),
+      ...(callerNumber != null && callerNumber.trim() !== "" ? { caller_number: callerNumber.trim() } : {}),
+    };
+    console.log("[live-session] End Session: sending POST /api/call-history", {
+      session_id: payload.session_id,
+      transcriptLen: payload.transcript.length,
+      ai_responseLen: payload.ai_response.length,
+      call_duration: payload.call_duration,
+    });
     try {
-      await fetch("/api/call-history", {
+      const res = await fetch("/api/call-history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: sessionId,
-          transcript,
-          ai_response: aiResponse,
-          tone,
-          escalation_risk: escalationRisk,
-          call_duration: duration,
-          ended_at: new Date().toISOString(),
-        }),
+        body: JSON.stringify(payload),
       });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        const errMsg = (errBody as { error?: string }).error ?? res.statusText ?? `HTTP ${res.status}`;
+        console.error("[live-session] save failed:", res.status, errMsg, errBody);
+        setCustomerError(`Session could not be saved: ${errMsg}`);
+        return;
+      }
     } catch (err) {
       console.error("[live-session] failed to save call history:", err);
+      setCustomerError(err instanceof Error ? err.message : "Session could not be saved.");
+      return;
     }
 
     setSessionTranscript([]);
@@ -297,18 +319,52 @@ export default function LiveSessionPage() {
     riskLevel,
     risk,
     sessionId,
+    callerNumber,
   ]);
 
   useEffect(() => {
-    const socket = new WebSocket("ws://localhost:8787/ui");
+    mountedRef.current = true;
+    console.log("[live-session] component mount — setting up WebSocket");
 
-    socket.onopen = () => {
-      console.log("Connected to realtime gateway");
-    };
+    // Cancel any pending close from a previous unmount (e.g. Strict Mode or quick remount).
+    if (closeTimeoutRef.current != null) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+      console.log("[live-session] cancelled pending WebSocket close");
+    }
 
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log("WS message:", data);
+    const existing = wsRef.current;
+    const needNew =
+      existing == null ||
+      existing.readyState === WebSocket.CLOSED ||
+      existing.readyState === WebSocket.CLOSING;
+
+    if (!needNew) {
+      console.log("[live-session] reusing existing WebSocket, readyState=", existing.readyState);
+    } else {
+      if (existing != null) {
+        try {
+          existing.close();
+        } catch (_) {}
+        wsRef.current = null;
+      }
+
+      const socket = new WebSocket("ws://localhost:8787/ui");
+      wsRef.current = socket;
+      console.log("[live-session] WebSocket created ws://localhost:8787/ui");
+
+      socket.onopen = () => {
+        console.log("[live-session] WebSocket onopen");
+      };
+
+      socket.onmessage = (event) => {
+      let data: Record<string, unknown> = {};
+      try {
+        data = JSON.parse(event.data as string) as Record<string, unknown>;
+        console.log("[live-session] WebSocket onmessage type=", data?.type, data);
+      } catch (_) {
+        console.log("[live-session] WebSocket onmessage (parse failed)", event.data);
+      }
 
       if (data.type === "call_state") {
         setSessionPhase("active");
@@ -342,14 +398,34 @@ export default function LiveSessionPage() {
     };
 
     socket.onerror = (err) => {
-      console.error("WebSocket error:", err);
+      console.error("[live-session] WebSocket onerror", err);
     };
 
-    socket.onclose = () => {
-      console.log("WebSocket closed");
+    socket.onclose = (ev) => {
+      console.log("[live-session] WebSocket onclose code=", ev.code, "reason=", ev.reason);
+      wsRef.current = null;
     };
+    }
 
-    return () => socket.close();
+    return () => {
+      mountedRef.current = false;
+      console.log("[live-session] component unmount — scheduling WebSocket close in 150ms");
+
+      if (closeTimeoutRef.current != null) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+      closeTimeoutRef.current = setTimeout(() => {
+        closeTimeoutRef.current = null;
+        const sock = wsRef.current;
+        if (sock != null) {
+          console.log("[live-session] closing WebSocket (cleanup)");
+          sock.close();
+          wsRef.current = null;
+        }
+      }, 150);
+    };
+    // Intentionally empty: create socket once on mount, cleanup on unmount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setConnection is stable; socket must not depend on other deps.
   }, []);
 
   useEffect(() => {

@@ -15,7 +15,7 @@ type AppStatus = {
 const AppStatusContext = createContext<AppStatus | null>(null);
 
 export function AppStatusProvider({ children }: { children: ReactNode }) {
-  const [connection, setConnection] = useState<ConnectionStatus>("connecting");
+  const [connection, setConnection] = useState<ConnectionStatus>("disconnected");
   const [session, setSession] = useState<SessionStatus>("idle");
   return (
     <AppStatusContext.Provider

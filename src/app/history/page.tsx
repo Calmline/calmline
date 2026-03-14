@@ -226,7 +226,7 @@ export default function HistoryPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/call-sessions");
+        const res = await fetch("/api/call-sessions", { cache: "no-store" });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || `HTTP ${res.status}`);

@@ -3,6 +3,22 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+// Temporary startup logging to diagnose Supabase connectivity.
+// Logs only presence flags and host, never full secrets.
+(() => {
+  const hasUrl = Boolean(supabaseUrl);
+  const hasServiceRoleKey = Boolean(supabaseServiceKey);
+  let host: string | null = null;
+  try {
+    if (hasUrl) {
+      host = new URL(supabaseUrl).host;
+    }
+  } catch {
+    host = null;
+  }
+  console.log("[supabase] init", { hasUrl, hasServiceRoleKey, host });
+})();
+
 export type TranscriptRow = {
   id: string;
   transcript_text: string;

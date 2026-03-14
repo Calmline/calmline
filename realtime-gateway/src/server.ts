@@ -952,7 +952,26 @@ function runServer(): void {
       }
       if (event === "start") {
         const startInfo = (msg as any).start;
-        console.log("[twilio] START", startInfo?.callSid, startInfo?.streamSid);
+        console.log(
+          "[twilio] START",
+          startInfo?.callSid,
+          startInfo?.streamSid,
+          "— notifying UI",
+        );
+        // Notify any connected UI clients that a live call has started.
+        // The Live Session page listens for a `call_state` message to move
+        // from "Connecting..." to an active state.
+        broadcastToUI("call_state", {
+          state: "active",
+          from:
+            typeof startInfo?.from === "string" && startInfo.from.trim().length > 0
+              ? startInfo.from
+              : undefined,
+          callSid: startInfo?.callSid,
+          streamSid: startInfo?.streamSid,
+        });
+        console.log("[ui] broadcast initial call_state=active");
+
         console.log("[twilio] START received — calling connectDeepgram()");
         state.streamSid = msg.start?.streamSid ?? "";
         connectDeepgram();

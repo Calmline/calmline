@@ -52,7 +52,7 @@ export function DashboardHeader() {
         </div>
 
         <div className="flex items-center gap-4">
-          {connection === "connecting" && (
+          {connection === "connecting" && pathname !== "/live-session" && (
             <span
               className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 before:mr-1.5 before:inline-block before:h-1.5 before:w-1.5 before:rounded-full before:bg-rose-500 before:content-['']"
             >

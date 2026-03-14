@@ -4,6 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  console.log("[call-sessions] GET start", {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+  });
   try {
     const { searchParams } = new URL(req.url);
     const daysParam = searchParams.get("days");
@@ -27,6 +31,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    console.log("[call-sessions] GET success", {
+      count: Array.isArray(data) ? data.length : 0,
+    });
     return NextResponse.json(data ?? []);
   } catch (err) {
     console.error("[call-sessions] error:", err);
