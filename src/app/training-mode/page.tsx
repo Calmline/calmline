@@ -712,6 +712,33 @@ function TrainingModeContent() {
           </div>
         </div>
       </section>
+
+      <section className="border-t border-slate-200 pt-10">
+        <div className="mb-6">
+          <h2 className="text-xl font-bold tracking-tight text-slate-900">
+            The Proof
+          </h2>
+          <p className="mt-1 text-sm text-slate-600 max-w-2xl leading-relaxed">
+            Your personal record of every escalation you successfully handled.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-center">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white px-6 py-8 shadow-md">
+            <div className="mb-4 flex justify-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 text-slate-700 text-2xl">
+                ⭐
+              </div>
+            </div>
+            <p className="text-center text-sm leading-relaxed text-slate-700 mb-4">
+              Every time you de-escalate a difficult call, CalmLine logs it here privately. This is your evidence — documented proof that you are good at this, that you are improving, and that hard calls do not define you. Only you can see this.
+            </p>
+            <p className="text-center text-sm text-slate-500">
+              Your wins will appear here after your first successful de-escalation.
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

@@ -38,6 +38,23 @@ export const IconLive = withIcon(() => (
   </>
 ));
 
+export const IconShield = withIcon(() => (
+  <>
+    <path
+      d="M12 3L6 5v6c0 3.5 2.4 6.2 6 7 3.6-.8 6-3.5 6-7V5l-6-2z"
+      stroke="currentColor"
+      strokeWidth="2"
+      fill="none"
+    />
+    <path
+      d="M12 8v6"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+  </>
+));
+
 export const IconPolicies = withIcon(() => (
   <>
       <path d="M7 2h10v6l-5 4-5-4V2z" stroke="currentColor" strokeWidth="2" fill="none"/>

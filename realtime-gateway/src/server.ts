@@ -49,7 +49,10 @@ function broadcastToUI(type: string, payload: Record<string, unknown> = {}): voi
 }
 
 const ROLLING_TRANSCRIPT_MAX = 1200;
-const COACH_PAUSE_MS = 650;
+// How long we wait after the last transcript update before generating a coach response
+const COACH_DEBOUNCE_MS = 1800;
+const COACH_PAUSE_MS = COACH_DEBOUNCE_MS;
+const RESPONSE_COOLDOWN_MS = 4000;
 const MIN_NEW_CHARS = 25;
 const MIN_INTERVAL_MS = 900;
 const MIN_PAUSE_CHARS = 10;
@@ -69,16 +72,27 @@ const ABUSIVE_SCRIPTS: Record<AbusiveSeverity, string> = {
     "I am unable to continue this conversation due to the language being used. This call is now ending.",
 };
 
+// Explicit profanity only — mild frustration words (ridiculous, insane, crazy, etc.) are NOT included
 const ABUSIVE_PROFANITY = [
-  "damn", "hell", "crap", "suck", "stupid", "idiot", "jerk", "bs", "bull",
-  "piss", "pissed", "screw", "screwed", "sucks", "ridiculous", "pathetic",
-  "worthless", "useless", "horrible", "shut up", "shut it",
+  "damn", "hell", "crap", "bull", "bs", "piss", "pissed", "screw", "screwed",
 ];
+// Direct insults toward the agent only
 const ABUSIVE_INSULTS = [
   "you're stupid", "you're an idiot", "you idiot", "you stupid", "you're useless",
   "you're pathetic", "stupid rep", "idiot rep", "you people", "worst service",
   "you can't do", "you don't care", "you're a jerk", "you jerk", "dumb rep",
-  "incompetent", "you're incompetent", "you're worthless",
+  "incompetent", "you're incompetent", "you're worthless", "shut up", "shut it",
+];
+// Mild frustration phrases that must NOT trigger abuse logic
+const MILD_FRUSTRATION_PHRASES = [
+  "this is ridiculous", "this is insane", "this is crazy", "this makes no sense",
+];
+// Service-problem context: prioritize problem resolution over behavior correction
+const SERVICE_PROBLEM_SIGNALS = [
+  "billing", "bill", "charged", "charge", "duplicate charge", "double charge",
+  "login", "log in", "logged in", "password", "account", "can't log",
+  "error", "error message", "something went wrong", "not working", "broken",
+  "refund", "dispute", "incorrect charge", "wrong amount", "missing payment",
 ];
 const ABUSIVE_SEVERE = [
   "kill you", "hurt you", "find you", "you're dead", "i'll sue", "lawyer",
@@ -88,9 +102,19 @@ const ABUSIVE_SEVERE = [
 function detectAbusiveLanguage(
   transcript: string,
   lastScriptSent?: "warning_needed" | "final_warning" | null,
-): { abusiveDetected: boolean; severity: AbusiveSeverity } {
+): { abusiveDetected: boolean; severity: AbusiveSeverity; allowTerminationScript: boolean } {
   const lower = transcript.toLowerCase().trim();
-  if (!lower) return { abusiveDetected: false, severity: "warning_needed" };
+  if (!lower) return { abusiveDetected: false, severity: "warning_needed", allowTerminationScript: false };
+
+  // Hard block: service problem (billing, charge, login, account, refund) → force abusiveDetected = false
+  if (isServiceProblemContext(transcript)) {
+    return { abusiveDetected: false, severity: "warning_needed", allowTerminationScript: false };
+  }
+
+  const normalized = lower.replace(/[.!?]+$/, "").trim();
+  if (MILD_FRUSTRATION_PHRASES.some((p) => normalized === p)) {
+    return { abusiveDetected: false, severity: "warning_needed", allowTerminationScript: false };
+  }
 
   const wordBoundary = (w: string) =>
     new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi");
@@ -104,20 +128,108 @@ function detectAbusiveLanguage(
   const insults = ABUSIVE_INSULTS.some((p) => lower.includes(p));
   const severe = ABUSIVE_SEVERE.some((p) => lower.includes(p));
 
-  if (severe) {
-    return { abusiveDetected: true, severity: "severe" };
-  }
-  if (!repeatedProfanity && !anyProfanity && !insults) {
-    return { abusiveDetected: false, severity: "warning_needed" };
+  // Mild frustration phrases/words NEVER trigger abuse (e.g. "ridiculous", "insane", "crazy", "this makes no sense")
+  const hasMildFrustrationPhrase =
+    MILD_FRUSTRATION_PHRASES.some((p) => lower.includes(p)) ||
+    ["ridiculous", "insane", "crazy"].some((w) => lower.includes(w));
+  if (hasMildFrustrationPhrase && !insults && !severe) {
+    return { abusiveDetected: false, severity: "warning_needed", allowTerminationScript: false };
   }
 
+  const hasProfanityOrAbusive = anyProfanity || insults || severe;
+  const repeatedAggression = repeatedProfanity || lastScriptSent != null;
+
+  if (severe) {
+    // Escalation HIGH (severe implies HIGH). Allow script only with repeated aggression.
+    const escalationHigh = true;
+    const allowTerminationScript = escalationHigh && hasProfanityOrAbusive && repeatedAggression;
+    return { abusiveDetected: true, severity: "severe", allowTerminationScript };
+  }
+  if (!repeatedProfanity && !anyProfanity && !insults) {
+    return { abusiveDetected: false, severity: "warning_needed", allowTerminationScript: false };
+  }
+
+  // severity=terminate_call ONLY when: abusiveDetected, escalation HIGH, and repeated aggression (already sent final_warning)
   if (lastScriptSent === "final_warning") {
-    return { abusiveDetected: true, severity: "terminate_call" };
+    const escalationHigh = true;
+    const allowTerminationScript = escalationHigh && hasProfanityOrAbusive && repeatedAggression;
+    return { abusiveDetected: true, severity: "terminate_call", allowTerminationScript };
   }
   if (lastScriptSent === "warning_needed") {
-    return { abusiveDetected: true, severity: "final_warning" };
+    const escalationHigh = true;
+    const allowTerminationScript = escalationHigh && hasProfanityOrAbusive && repeatedAggression;
+    return { abusiveDetected: true, severity: "final_warning", allowTerminationScript };
   }
-  return { abusiveDetected: true, severity: "warning_needed" };
+  // warning_needed: allow termination/language script ONLY if repeated aggression (not single frustrated statement)
+  const escalationHigh = repeatedAggression; // HIGH only when repeated
+  const allowTerminationScript = hasProfanityOrAbusive && repeatedAggression && escalationHigh;
+  return { abusiveDetected: true, severity: "warning_needed", allowTerminationScript };
+}
+
+function isServiceProblemContext(transcript: string): boolean {
+  const lower = transcript.toLowerCase().trim();
+  if (!lower) return false;
+  return SERVICE_PROBLEM_SIGNALS.some((signal) => lower.includes(signal));
+}
+
+function shouldGenerateResponse(transcript: string): boolean {
+  const text = transcript.trim().toLowerCase();
+  if (!text) return false;
+
+  // Block short or simple inputs
+  if (text.length < 40) return false;
+
+  // Block greetings / introductions
+  const blockedPatterns = [
+    "hello",
+    "hi",
+    "hey",
+    "my name is",
+    "this is",
+    "can you hear me",
+  ];
+
+  for (const pattern of blockedPatterns) {
+    if (text.includes(pattern)) {
+      return false;
+    }
+  }
+
+  // Only allow if meaningful intent exists
+  const intentKeywords = [
+    "help",
+    "issue",
+    "problem",
+    "charged",
+    "refund",
+    "not working",
+    "frustrated",
+    "upset",
+    "angry",
+    "need",
+    "why",
+    "what happened",
+  ];
+
+  return intentKeywords.some((keyword) => text.includes(keyword));
+}
+
+/** Classification for response generation only. Used when we are NOT taking the abusive-script path. */
+function classifyForResponse(
+  transcript: string,
+  abusiveDetected: boolean,
+  allowTerminationScript: boolean,
+): { escalationLevel: "LOW" | "MEDIUM"; isOperationalIssue: boolean } {
+  const isOperationalIssue = isServiceProblemContext(transcript);
+  const lower = transcript.toLowerCase().trim();
+  const isOnlyMildFrustration =
+    MILD_FRUSTRATION_PHRASES.some((p) => lower.replace(/[.!?]+$/, "").trim() === p);
+  if (isOnlyMildFrustration) {
+    return { escalationLevel: "LOW", isOperationalIssue };
+  }
+  const escalationLevel =
+    abusiveDetected && !allowTerminationScript ? "MEDIUM" : "LOW";
+  return { escalationLevel, isOperationalIssue };
 }
 
 function ts(): string {
@@ -162,21 +274,42 @@ function fetchPolicyChunksStub(_context: string, _signal: AbortSignal): Promise<
 
 const TURN_COACH_SYSTEM_PROMPT = `You are Calmline, a real-time customer support coach. Output in this exact format:
 
-1. First line(s): The exact words the agent should read aloud (1-3 sentences). Start with empathy/confirmation, then 1 clarifying question or next step. Do NOT repeat the customer verbatim.
+1. First line(s): The exact words the agent should read aloud (1-2 short sentences). Start with a strong, natural opening and then 1 clear action or next step. Do NOT repeat the customer verbatim.
 2. Then a blank line, then: NEXT_QUESTION: <exactly one question to ask>
 3. Then: INTERNAL_NOTES: <short optional note, max 1 line>
 
 Example:
-I understand that's frustrating. Let me look into that for you. Can you tell me when you placed the order?
+Got it, that sounds frustrating. I'm going to fix this now and check what happened with your order.
 
-NEXT_QUESTION: Would you like me to check the status of your refund?
-INTERNAL_NOTES: Customer mentioned order issue
+NEXT_QUESTION: When did you place this order, and what amount do you see on your statement?
+INTERNAL_NOTES: Customer reporting possible duplicate charge on recent order
 
-Keep the spoken part under 3 sentences. Be calm, confident, policy-safe.`;
+Keep the spoken part under 2 sentences. Be calm, confident, concise, and policy-safe.
+
+OPENING AND TONE RULES (mandatory):
+- Avoid weak openings like "I understand", "I see", or "I'm sorry". Prefer strong, natural openings such as "Got it,", "Okay, I hear you,", or "I can see what's happening here,".
+- The agent should sound confident and in control, not submissive or overly apologetic.
+
+ACTION LANGUAGE RULES (mandatory):
+- Do NOT use weak, passive phrases like "let me check", "I'll look into it", or "I'll try". Replace them with strong action language like "I'm going to fix this now", "I'll take care of this right away", or "Let's get this resolved now".
+
+CONTEXT-SPECIFIC RULES (mandatory):
+- If the transcript mentions a specific issue (e.g. billing, charges, duplicate charge, refund, login, password, account access, error messages), the response MUST clearly reference that issue instead of generic empathy.
+- For operational issues (billing, login, account, refund, error, duplicate charge): ALWAYS prioritize resolving the specific issue over tone commentary. Be direct and solution-focused.
+
+ESCALATION AND BEHAVIOR RULES (mandatory):
+- Do NOT suggest ending the call, warning about behavior, or mentioning language/respect. You only generate problem-solving responses.
+- Treat customer frustration (e.g. "this is ridiculous", "this is insane", "this makes no sense") as normal frustration — respond with LOW escalation: focus on fixing the problem, be calm and helpful. Do NOT treat these as abuse or correct tone.
+- For LOW escalation: focus on fixing the problem; be calm, direct, and helpful; do NOT escalate tone or mention behavior.`;
 
 type CoachTiming = {
   firstDeltaAt?: number;
   doneAt?: number;
+};
+
+type CoachContext = {
+  escalationLevel?: "LOW" | "MEDIUM";
+  isOperationalIssue?: boolean;
 };
 
 async function streamCoachSuggestion(
@@ -184,6 +317,7 @@ async function streamCoachSuggestion(
   signal: AbortSignal,
   onDelta: (delta: string, seq: number) => void,
   timing?: CoachTiming,
+  coachContext?: CoachContext,
 ): Promise<string | null> {
   const text = context.trim();
   if (!text) return null;
@@ -196,6 +330,15 @@ async function streamCoachSuggestion(
 
   const policyChunks = await fetchPolicyChunksStub(context, signal);
   let systemPrompt = TURN_COACH_SYSTEM_PROMPT;
+
+  if (coachContext?.isOperationalIssue) {
+    systemPrompt +=
+      "\n\nThis conversation is about an operational issue (billing, login, account, etc.). Prioritize resolving the customer's problem. Do not correct tone or mention behavior.";
+  }
+  if (coachContext?.escalationLevel === "LOW") {
+    systemPrompt +=
+      "\n\nCurrent escalation is LOW. Focus only on fixing the problem; be calm, direct, and helpful. Do not escalate tone or mention behavior or language.";
+  }
 
   if (policyChunks.length > 0) {
     systemPrompt +=
@@ -462,6 +605,7 @@ function runServer(): void {
     let lastCoachAt = 0;
     let lastCoachChars = 0;
     let coachInFlight = false;
+    let isGenerating = false;
     let currentCoachId = 0;
     let pauseTimer: ReturnType<typeof setTimeout> | null = null;
     let coachAbortController: AbortController | null = null;
@@ -473,11 +617,17 @@ function runServer(): void {
     let lastFinalAt = 0;
     let lastFinalTranscriptLen = 0;
     let lastAbusiveScriptSent: "warning_needed" | "final_warning" | null = null;
+    let lastEscalationLevel: "LOW" | "MEDIUM" | null = null;
+    let lastIssueHash: string | null = null;
+    let lastProcessedTranscript = "";
+    let currentRequestId = 0;
+    let lastResponseTime = 0;
 
     function maybeTriggerCoachFirstTranscript(): void {
       const chars = rollingTranscript.trim().length;
       if (chars < MIN_FIRST_TRANSCRIPT_CHARS) return;
       if (hasCoachedYet || coachInFlight) return;
+      // Still uses maybeTriggerCoach, which now has a global debounce gate.
       maybeTriggerCoach("first_transcript");
     }
 
@@ -499,9 +649,38 @@ function runServer(): void {
     }
 
     function maybeTriggerCoach(reason: "pause" | "growth" | "interval" | "first_transcript"): void {
-      const { abusiveDetected, severity } = detectAbusiveLanguage(rollingTranscript, lastAbusiveScriptSent);
-      if (abusiveDetected) {
-        console.log("[abuse] detected=true severity=" + severity);
+      const sinceLastTranscript = Date.now() - lastTranscriptTs;
+      if (sinceLastTranscript < COACH_DEBOUNCE_MS) {
+        console.log("[coach] BLOCKED by debounce", sinceLastTranscript, "ms reason=", reason);
+        return;
+      }
+      console.log("[coach] ALLOWED after pause", sinceLastTranscript, "ms reason=", reason);
+
+      const now = Date.now();
+      const sinceLastResponse = now - lastResponseTime;
+      if (sinceLastResponse < RESPONSE_COOLDOWN_MS) {
+        console.log(
+          "[coach] BLOCKED by cooldown",
+          sinceLastResponse,
+          "ms (<",
+          RESPONSE_COOLDOWN_MS,
+          "ms) reason=",
+          reason,
+        );
+        return;
+      }
+
+      const { abusiveDetected, severity, allowTerminationScript } = detectAbusiveLanguage(rollingTranscript, lastAbusiveScriptSent);
+      const serviceProblem = isServiceProblemContext(rollingTranscript);
+      if (serviceProblem && abusiveDetected) {
+        console.log("[abuse] service-problem context → prioritize problem resolution, skip behavior correction");
+      }
+      // HARD GUARDRAIL: Do NOT allow call-ending or behavioral warning responses unless BOTH:
+      // (1) Escalation level is HIGH (allowTerminationScript implies: explicit profanity or repeated abusive language present),
+      // (2) Explicit profanity or repeated abusive language is present (encoded in allowTerminationScript).
+      // Operational issues (billing, login, account, etc.) never use this path — treat as solvable, not behavioral.
+      if (abusiveDetected && allowTerminationScript && !serviceProblem) {
+        console.log("[abuse] detected=true severity=" + severity + " allowTerminationScript=true");
         console.log("[abuse] override_tone=ABUSIVE");
         console.log("[abuse] override_risk=HIGH");
         console.log("[abuse] override_response=true");
@@ -513,8 +692,7 @@ function runServer(): void {
           coachAbortController = null;
         }
         coachInFlight = true;
-        broadcastToUI("coach_start", { coachId, messageId: coachId });
-        broadcastToUI("coach_delta", { messageId: coachId, coachId, delta: script, seq: 1 });
+        // For abusive scripts, only emit a single, final suggestion to the UI.
         broadcastToUI("coach_final", { coachId, messageId: coachId, text: script, message: script });
         if (severity === "warning_needed" || severity === "final_warning") {
           lastAbusiveScriptSent = severity;
@@ -527,9 +705,16 @@ function runServer(): void {
         coachAbortController = null;
         return;
       }
+      if (abusiveDetected && !allowTerminationScript) {
+        console.log("[abuse] detected=true severity=" + severity + " allowTerminationScript=false → fallback to standard de-escalation");
+      }
 
       const chars = rollingTranscript.length;
       const transcriptLen = rollingTranscript.trim().length;
+      const normalizedTranscript = rollingTranscript.trim().toLowerCase();
+      const wordCount = normalizedTranscript.split(/\s+/).filter(Boolean).length;
+      const hasSentenceBoundary = /[.!?]\s*$/.test(normalizedTranscript);
+      const hasMinWordsOrSentence = wordCount >= 10 || hasSentenceBoundary;
       const newChars = chars - lastCoachChars;
       const sinceLastMs = Date.now() - lastCoachAt;
       const timeSinceLastFinal = Date.now() - lastFinalAt;
@@ -542,18 +727,49 @@ function runServer(): void {
       const hasNewText = newChars > 0 || reason === "pause" || reason === "first_transcript";
       const bypassCooldown = reason === "pause" || reason === "first_transcript";
       const cooldownOk = bypassCooldown || timeSinceLastFinal >= COOLDOWN_MS;
+
+      // Allow an initial response even if newInfoChars is small, as long as we have some transcript
+      // or the call has been active briefly. Also add a hard fallback once transcriptLen is meaningful.
+      const firstResponseEligible = !hasCoachedYet && transcriptLen > 0;
+      const sinceFirstTranscript =
+        firstTranscriptTs != null ? Date.now() - firstTranscriptTs : null;
+      const firstTimeOk = sinceFirstTranscript != null && sinceFirstTranscript >= 1500;
+      const forceFirst = !hasCoachedYet && transcriptLen > 20;
+
       const newInfoOk =
-        bypassCooldown || newInfoChars >= MIN_NEW_INFO_CHARS;
+        bypassCooldown ||
+        newInfoChars >= MIN_NEW_INFO_CHARS ||
+        firstResponseEligible ||
+        firstTimeOk;
+
+      const hasNewTextOrFirst = hasNewText || forceFirst;
+      const reasonOk =
+        reason === "first_transcript" ||
+        pauseOk ||
+        (reason === "growth" && growthOrIntervalOk) ||
+        (reason === "interval" && growthOrIntervalOk);
+
       const shouldRun =
         !coachInFlight &&
+        !isGenerating &&
         hasMinContent &&
-        hasNewText &&
+        hasMinWordsOrSentence &&
+        hasNewTextOrFirst &&
         cooldownOk &&
-        newInfoOk &&
-        (reason === "first_transcript" ||
-          pauseOk ||
-          (reason === "growth" && growthOrIntervalOk) ||
-          (reason === "interval" && growthOrIntervalOk));
+        (newInfoOk || forceFirst) &&
+        (reasonOk || forceFirst);
+
+      if (!shouldGenerateResponse(normalizedTranscript)) {
+        console.log("[coach] SKIP low-value/premature response for transcript");
+        return;
+      }
+
+      const isMeaningfullyDifferent =
+        Math.abs(normalizedTranscript.length - lastProcessedTranscript.length) > 20;
+      if (!isMeaningfullyDifferent) {
+        console.log("[coach] SKIP — transcript change not meaningful; avoiding re-generate");
+        return;
+      }
 
       if (!cooldownOk) {
         console.log(
@@ -594,8 +810,11 @@ function runServer(): void {
 
       currentCoachId += 1;
       const coachId = currentCoachId;
+      currentRequestId += 1;
+      const requestId = currentRequestId;
 
       coachInFlight = true;
+      isGenerating = true;
       if (coachAbortController) {
         coachAbortController.abort();
         coachAbortController = null;
@@ -603,28 +822,55 @@ function runServer(): void {
       const controller = new AbortController();
       coachAbortController = controller;
 
-      if (reason === "first_transcript") hasCoachedYet = true;
+      if (!hasCoachedYet) hasCoachedYet = true;
       console.log("[coach] START coachId=", coachId);
-      broadcastToUI("coach_start", { coachId, messageId: coachId });
 
       const tOpenaiStart = Date.now();
       const coachTiming: CoachTiming = {};
 
+      const responseClassification = classifyForResponse(
+        rollingTranscript,
+        abusiveDetected,
+        allowTerminationScript,
+      );
+      const issueKey = hashText(rollingTranscript.trim().slice(-200));
+      if (
+        hasCoachedYet &&
+        responseClassification.escalationLevel === lastEscalationLevel &&
+        issueKey === lastIssueHash
+      ) {
+        console.log(
+          "[coach] SKIP new suggestion — stable escalation and issue; avoiding flicker",
+        );
+        return;
+      }
       void streamCoachSuggestion(
         rollingTranscript,
         controller.signal,
-        (delta, seq) => {
+        (delta, _seq) => {
+          // Only track timing for internal metrics; do NOT stream partial text to the UI.
           if (controller.signal.aborted) return;
           if (coachId !== currentCoachId) return;
           if (firstCoachDeltaTs == null) firstCoachDeltaTs = Date.now();
-          broadcastToUI("coach_delta", { messageId: coachId, coachId, delta, seq });
         },
         coachTiming,
+        responseClassification,
       ).then((finalText) => {
+        if (requestId !== currentRequestId) {
+          // Outdated response – a newer generation has started. Ignore this result.
+          console.log("[coach] IGNORE outdated response for requestId=", requestId, "currentRequestId=", currentRequestId);
+          if (coachAbortController === controller) {
+            coachAbortController = null;
+          }
+          coachInFlight = false;
+          isGenerating = false;
+          return;
+        }
         if (coachAbortController === controller) {
           coachAbortController = null;
         }
         coachInFlight = false;
+        isGenerating = false;
         lastCoachAt = Date.now();
         lastCoachChars = rollingTranscript.length;
 
@@ -645,7 +891,11 @@ function runServer(): void {
 
         if (!controller.signal.aborted && finalText && coachId === currentCoachId) {
           lastFinalAt = Date.now();
+          lastResponseTime = lastFinalAt;
           lastFinalTranscriptLen = rollingTranscript.length;
+          lastEscalationLevel = responseClassification.escalationLevel;
+          lastIssueHash = issueKey;
+          lastProcessedTranscript = normalizedTranscript;
           const parsed = parseCoachOutput(finalText);
           broadcastToUI("coach_final", {
             coachId,
@@ -662,6 +912,7 @@ function runServer(): void {
           coachAbortController = null;
         }
         coachInFlight = false;
+        isGenerating = false;
         console.error("[coach] ERROR", err);
       });
     }

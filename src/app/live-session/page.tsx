@@ -521,7 +521,7 @@ export default function LiveSessionPage() {
             </h2>
             <div
               ref={transcriptRef}
-              className="h-96 overflow-y-auto rounded-lg border border-[#E2E8F0] p-4 scroll-smooth text-sm transcript-panel"
+              className="h-96 overflow-y-auto rounded-lg border border-[#E2E8F0] bg-slate-50 p-4 scroll-smooth text-sm leading-relaxed whitespace-pre-wrap transcript-panel"
               style={{ color: "#1E293B" }}
             >
               {transcriptLines.length === 0 ? (
@@ -537,7 +537,7 @@ export default function LiveSessionPage() {
                           : "Connect to the gateway to see the transcript."}
                 </p>
               ) : (
-                <div className="transcript-box">
+                <div className="transcript-box space-y-2">
                   {transcriptLines.map((line, i) => (
                     <div key={i}>{line}</div>
                   ))}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   IconOverview,
+  IconShield,
   IconLive,
   IconPolicies,
   IconAnalytics,
@@ -15,6 +16,7 @@ import {
 
 const items = [
   { href: "/overview", label: "Overview", Icon: IconOverview },
+  { href: "/pre-call-armor", label: "Pre-Call Armor", Icon: IconShield },
   { href: "/live-session", label: "Live Session", Icon: IconLive },
   { href: "/policies", label: "Policies", Icon: IconPolicies },
   { href: "/risk-analytics", label: "Risk Analytics", Icon: IconAnalytics },
