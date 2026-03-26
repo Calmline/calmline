@@ -2,6 +2,12 @@
 
 import { useState, useEffect } from "react";
 import type { SettingsPayload } from "@/app/api/settings/route";
+import { Card } from "@/components/ui/Card";
+
+const field =
+  "mt-1.5 block w-full rounded-[10px] border border-white/[0.1] bg-white/[0.04] px-3 py-2 text-[#E6EEF6] shadow-sm placeholder-[#6B859F] focus:border-[#1FD6A6]/40 focus:outline-none focus:ring-1 focus:ring-[#1FD6A6]/30";
+const btnPrimary =
+  "rounded-[10px] bg-[#1FD6A6] px-4 py-2 text-sm font-medium text-[#0B141F] transition hover:brightness-95 disabled:opacity-50";
 
 type SettingsState = {
   profile: { displayName: string; email: string };
@@ -122,32 +128,32 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 md:p-8">
+      <div>
         <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-neutral-900">Settings</h1>
-          <p className="mt-1 text-sm text-neutral-500">
+          <h1 className="mb-4 text-2xl font-semibold tracking-tight text-[#E6EEF6]">Settings</h1>
+          <p className="mt-1 text-sm text-[#9FB3C8]">
             Enterprise configuration
           </p>
         </div>
-        <div className="rounded-xl border border-neutral-200 bg-white p-12 text-center">
-          <p className="text-sm text-neutral-500">Loading settings…</p>
-        </div>
+        <Card className="p-12 text-center hover:!translate-y-0">
+          <p className="text-sm text-[#9FB3C8]">Loading settings…</p>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="p-6 md:p-8">
+    <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-neutral-900">Settings</h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <h1 className="mb-4 text-2xl font-semibold tracking-tight text-[#E6EEF6]">Settings</h1>
+        <p className="mt-1 text-sm text-[#9FB3C8]">
           Enterprise configuration
         </p>
       </div>
 
       {error && (
         <div
-          className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          className="mb-6 rounded-[10px] border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200"
           role="alert"
         >
           {error}
@@ -156,7 +162,7 @@ export default function SettingsPage() {
 
       {saveSuccess && (
         <div
-          className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          className="mb-6 rounded-[10px] border border-[#1FD6A6]/30 bg-[#1FD6A6]/10 px-4 py-3 text-sm text-[#1FD6A6]"
           role="status"
         >
           Settings saved.
@@ -164,14 +170,14 @@ export default function SettingsPage() {
       )}
 
       <div className="max-w-2xl space-y-6">
-        <section className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-neutral-800">Profile</h2>
-          <p className="mt-0.5 text-xs text-neutral-500">
+        <Card className="!p-6 hover:!translate-y-0">
+          <h2 className="text-sm font-semibold text-[#E6EEF6]">Profile</h2>
+          <p className="mt-0.5 text-xs text-[#9FB3C8]">
             Account display and contact
           </p>
           <form onSubmit={handleSaveProfile} className="mt-5 space-y-4">
             <label className="block">
-              <span className="text-xs font-medium text-neutral-600">
+              <span className="text-xs font-medium text-[#9FB3C8]">
                 Display name
               </span>
               <input
@@ -183,11 +189,11 @@ export default function SettingsPage() {
                     profile: { ...s.profile, displayName: e.target.value },
                   }))
                 }
-                className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-neutral-900 shadow-sm focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+                className={field}
               />
             </label>
             <label className="block">
-              <span className="text-xs font-medium text-neutral-600">Email</span>
+              <span className="text-xs font-medium text-[#9FB3C8]">Email</span>
               <input
                 type="email"
                 value={settings.profile.email}
@@ -197,24 +203,20 @@ export default function SettingsPage() {
                     profile: { ...s.profile, email: e.target.value },
                   }))
                 }
-                className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-neutral-900 shadow-sm focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+                className={field}
               />
             </label>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
-            >
+            <button type="submit" disabled={saving} className={btnPrimary}>
               {saving ? "Saving…" : "Save profile"}
             </button>
           </form>
-        </section>
+        </Card>
 
-        <section className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-neutral-800">
+        <Card className="!p-6 hover:!translate-y-0">
+          <h2 className="text-sm font-semibold text-[#E6EEF6]">
             Notifications
           </h2>
-          <p className="mt-0.5 text-xs text-neutral-500">
+          <p className="mt-0.5 text-xs text-[#9FB3C8]">
             Alerts and digests
           </p>
           <form onSubmit={handleSaveNotifications} className="mt-5 space-y-4">
@@ -231,13 +233,13 @@ export default function SettingsPage() {
                     },
                   }))
                 }
-                className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-400"
+                className="mt-0.5 h-4 w-4 rounded border-white/[0.2] bg-white/[0.04] text-[#1FD6A6] focus:ring-[#1FD6A6]/40"
               />
               <div>
-                <span className="text-sm font-medium text-neutral-900">
+                <span className="text-sm font-medium text-[#E6EEF6]">
                   Escalation risk alerts
                 </span>
-                <p className="mt-0.5 text-xs text-neutral-500">
+                <p className="mt-0.5 text-xs text-[#9FB3C8]">
                   Notify when a live session reaches high or critical risk
                 </p>
               </div>
@@ -255,40 +257,36 @@ export default function SettingsPage() {
                     },
                   }))
                 }
-                className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-400"
+                className="mt-0.5 h-4 w-4 rounded border-white/[0.2] bg-white/[0.04] text-[#1FD6A6] focus:ring-[#1FD6A6]/40"
               />
               <div>
-                <span className="text-sm font-medium text-neutral-900">
+                <span className="text-sm font-medium text-[#E6EEF6]">
                   Daily summary
                 </span>
-                <p className="mt-0.5 text-xs text-neutral-500">
+                <p className="mt-0.5 text-xs text-[#9FB3C8]">
                   Daily digest of risk analytics and call volume
                 </p>
               </div>
             </label>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
-            >
+            <button type="submit" disabled={saving} className={btnPrimary}>
               {saving ? "Saving…" : "Save notifications"}
             </button>
           </form>
-        </section>
+        </Card>
 
-        <section className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-neutral-800">
+        <Card className="!p-6 hover:!translate-y-0">
+          <h2 className="text-sm font-semibold text-[#E6EEF6]">
             Preferences
           </h2>
-          <p className="mt-0.5 text-xs text-neutral-500">
+          <p className="mt-0.5 text-xs text-[#9FB3C8]">
             Thresholds and organization
           </p>
           <form onSubmit={handleSavePreferences} className="mt-5 space-y-4">
             <label className="block">
-              <span className="text-xs font-medium text-neutral-600">
+              <span className="text-xs font-medium text-[#9FB3C8]">
                 Escalation risk threshold (%)
               </span>
-              <p className="mt-0.5 text-xs text-neutral-500">
+              <p className="mt-0.5 text-xs text-[#9FB3C8]">
                 Show warning when session risk exceeds this value (0–100)
               </p>
               <input
@@ -305,11 +303,11 @@ export default function SettingsPage() {
                     },
                   }))
                 }
-                className="mt-1.5 block w-full max-w-[120px] rounded-lg border border-neutral-300 px-3 py-2 text-neutral-900 shadow-sm focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+                className={`${field} max-w-[120px]`}
               />
             </label>
             <label className="block">
-              <span className="text-xs font-medium text-neutral-600">
+              <span className="text-xs font-medium text-[#9FB3C8]">
                 Organization name
               </span>
               <input
@@ -321,11 +319,11 @@ export default function SettingsPage() {
                     preferences: { ...s.preferences, orgName: e.target.value },
                   }))
                 }
-                className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-neutral-900 shadow-sm focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+                className={field}
               />
             </label>
             <label className="block">
-              <span className="text-xs font-medium text-neutral-600">
+              <span className="text-xs font-medium text-[#9FB3C8]">
                 Timezone
               </span>
               <select
@@ -339,7 +337,7 @@ export default function SettingsPage() {
                     },
                   }))
                 }
-                className="mt-1.5 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-neutral-900 shadow-sm focus:border-neutral-400 focus:outline-none focus:ring-1 focus:ring-neutral-400"
+                className={field}
               >
                 <option value="America/New_York">Eastern (America/New_York)</option>
                 <option value="America/Chicago">Central (America/Chicago)</option>
@@ -348,15 +346,11 @@ export default function SettingsPage() {
                 <option value="UTC">UTC</option>
               </select>
             </label>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
-            >
+            <button type="submit" disabled={saving} className={btnPrimary}>
               {saving ? "Saving…" : "Save preferences"}
             </button>
           </form>
-        </section>
+        </Card>
       </div>
     </div>
   );

@@ -6,12 +6,6 @@ import { useRef, useEffect, useState } from "react";
 import { IconSearch } from "@/components/Icons";
 import { useAppStatus } from "@/context/AppStatusContext";
 
-const navItems = [
-  { href: "/overview", label: "Dashboard" },
-  { href: "/live-session", label: "Live Session" },
-  { href: "/settings", label: "Settings" },
-] as const;
-
 export function DashboardHeader() {
   const pathname = usePathname();
   const { connection } = useAppStatus();
@@ -29,24 +23,27 @@ export function DashboardHeader() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 h-14 border-b border-slate-200 bg-white">
-      <div className="flex h-full items-center justify-between gap-3 px-6">
-        <Link href="/overview" className="flex items-center gap-2">
-          <span className="text-lg font-semibold tracking-tight text-slate-900">
-            Calmline
+    <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#0B141F]/95 backdrop-blur-sm">
+      <div className="flex min-h-[3.75rem] items-center justify-between gap-4 px-8 py-4">
+        <Link href="/overview" className="flex items-center gap-3">
+          <span className="text-lg font-semibold tracking-tight text-[#E6EEF6]">
+            CalmLine
           </span>
-          <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-            Realtime Coaching
+          <span
+            className="rounded-full border border-white/[0.1] px-3 py-1 text-xs font-medium text-[#9FB3C8]"
+            style={{ background: "rgba(255,255,255,0.05)" }}
+          >
+            Agent Protection Platform
           </span>
         </Link>
 
-        <div className="hidden flex-1 max-w-sm mx-6 lg:block">
+        <div className="mx-6 hidden max-w-sm flex-1 lg:block">
           <div className="relative">
-            <IconSearch className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <IconSearch className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B859F]" />
             <input
               type="text"
               placeholder="Search sessions, agents…"
-              className="h-10 w-full rounded-lg border border-slate-300 bg-white pl-8 pr-4 text-sm text-slate-700 placeholder-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              className="h-10 w-full rounded-lg border border-white/[0.1] bg-white/[0.04] pl-8 pr-4 text-sm text-[#E6EEF6] placeholder-[#6B859F] transition-all duration-200 focus:border-white/[0.15] focus:outline-none focus:ring-1 focus:ring-[#1FD6A6]/30"
             />
           </div>
         </div>
@@ -54,60 +51,42 @@ export function DashboardHeader() {
         <div className="flex items-center gap-4">
           {connection === "connecting" && pathname !== "/live-session" && (
             <span
-              className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 before:mr-1.5 before:inline-block before:h-1.5 before:w-1.5 before:rounded-full before:bg-rose-500 before:content-['']"
+              className="inline-flex items-center rounded-full border border-rose-500/30 bg-rose-950/40 px-3 py-1 text-xs font-medium text-rose-300 before:mr-1.5 before:inline-block before:h-1.5 before:w-1.5 before:rounded-full before:bg-rose-400 before:content-['']"
             >
               Connecting…
             </span>
           )}
-          <nav className="hidden gap-1 sm:flex" aria-label="Top navigation">
-            {navItems.map(({ href, label }) => {
-              const isActive = pathname === href;
-              return (
-                <Link
-                  key={label}
-                  href={href}
-                  className={`rounded-md px-3 py-2 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400/40 ${
-                    isActive
-                      ? "text-slate-900"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  {label}
-                </Link>
-              );
-            })}
-          </nav>
           <div className="relative" ref={avatarRef}>
             <button
               type="button"
               onClick={() => setAvatarOpen((o) => !o)}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400/40 focus:ring-offset-2"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1FD6A6] text-xs font-semibold text-[#0B141F] shadow-sm transition-all duration-200 hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-[#1FD6A6]/50 focus:ring-offset-2 focus:ring-offset-[#0B141F]"
             >
               K
             </button>
             {avatarOpen && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-md ring-1 ring-slate-900/5">
-                <div className="border-b border-slate-100 px-3 py-2">
-                  <p className="text-sm font-medium text-slate-800">Kyla Davis</p>
-                  <p className="text-xs text-slate-500">kyla@company.com</p>
+              <div className="absolute right-0 top-full z-50 mt-2 w-44 rounded-lg border border-white/[0.08] bg-[#0F1C2B] py-1 shadow-[0_10px_30px_rgba(0,0,0,0.35)] ring-1 ring-black/20">
+                <div className="border-b border-white/[0.06] px-3 py-2">
+                  <p className="text-sm font-medium text-[#E6EEF6]">Kyla Davis</p>
+                  <p className="text-xs text-[#9FB3C8]">kyla@company.com</p>
                 </div>
                 <Link
                   href="#"
-                  className="block px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+                  className="block px-3 py-2 text-sm text-[#E6EEF6] transition-colors hover:bg-white/[0.05]"
                   onClick={() => setAvatarOpen(false)}
                 >
                   Account
                 </Link>
                 <Link
                   href="#"
-                  className="block px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+                  className="block px-3 py-2 text-sm text-[#E6EEF6] transition-colors hover:bg-white/[0.05]"
                   onClick={() => setAvatarOpen(false)}
                 >
                   Workspace
                 </Link>
                 <button
                   type="button"
-                  className="w-full px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50"
+                  className="w-full px-3 py-2 text-left text-sm text-[#E6EEF6] transition-colors hover:bg-white/[0.05]"
                   onClick={() => setAvatarOpen(false)}
                 >
                   Sign out

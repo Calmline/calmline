@@ -10,7 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Calmline — De-escalation AI",
+  title: "CalmLine — De-escalation AI",
   description: "Real-time escalation prevention for customer support teams.",
 };
 
@@ -21,8 +21,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="min-h-screen bg-white font-sans text-heading antialiased">
-        <DashboardLayout>{children}</DashboardLayout>
+      <body className="min-h-screen bg-[#0B141F] font-sans antialiased text-[#E6EEF6]">
+        <div className="min-h-screen bg-[#0B141F] text-[#E6EEF6]">
+          <DashboardLayout>{children}</DashboardLayout>
+        </div>
       </body>
     </html>
   );

@@ -1,36 +1,50 @@
-import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
 /**
  * Twilio Voice webhook: returns TwiML to start a Media Stream to realtime-gateway.
- * Stream must be wss://<PUBLIC_HOST>/twilio/media so Twilio can reach the gateway (no localhost).
+ *
+ * One public URL (e.g. one ngrok tunnel → Next.js port 3000):
+ * - Voice webhook: https://<host>/api/twilio/voice
+ * - Media stream: wss://<host>/twilio/media — proxied by `server.js` to ws://127.0.0.1:8787/twilio/media
+ *
  * Configure in Twilio: Phone Numbers → your number → Voice → Webhook → https://your-domain/api/twilio/voice
  */
-export async function POST(request: Request) {
-  // Prefer full Stream URL so it can point at the realtime-gateway (e.g. second ngrok to 8787).
-  const fullStreamUrl =
-    process.env.TWILIO_STREAM_WSS_URL ||
-    process.env.CALMLINE_TWILIO_STREAM_WSS_URL;
-  const baseUrl = process.env.TWILIO_WS_BASE_URL || process.env.NEXT_PUBLIC_WS_URL;
-  const streamUrl = fullStreamUrl
-    ? fullStreamUrl.replace(/^http:/, "wss:").replace(/\/$/, "")
-    : baseUrl
-      ? `${baseUrl.replace(/^http/, "ws").replace(/\/$/, "")}/twilio/media`
-      : "wss://your-domain/twilio/media";
-  console.log("[twilio/voice] Stream URL (exact):", streamUrl);
+export async function POST(req: NextRequest) {
+  console.log("🔥 VOICE ROUTE HIT");
+  const formData = await req.formData();
+  const from = (formData.get("From") as string) || "unknown";
 
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Start>
-    <Stream url="${streamUrl}" />
-  </Start>
-  <Say>Connecting to Calmline test session.</Say>
-</Response>`;
+  console.log("[voice] incoming call from:", from);
 
-  return new NextResponse(twiml, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/xml",
-      "Cache-Control": "no-cache",
-    },
-  });
+  try {
+    console.log("[voice] attempting precall fetch...");
+
+    const res = await fetch("http://127.0.0.1:8787/precall", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        timestamp: Date.now(),
+      }),
+    });
+
+    console.log("[voice] precall response status:", res.status);
+  } catch (err) {
+    console.log("[voice] precall ERROR:", err);
+  }
+
+  const streamUrl = `wss://${req.headers.get("host")}/twilio/media`;
+
+  return new Response(
+    `<Response>
+     <Say>CalmLine is connected. You can begin speaking.</Say>
+     <Pause length="60"/>
+     <Start>
+       <Stream url="${streamUrl}" />
+     </Start>
+   </Response>`,
+    { headers: { "Content-Type": "text/xml" } },
+  );
 }

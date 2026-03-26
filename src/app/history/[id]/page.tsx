@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { Card } from "@/components/ui/Card";
+
 type CallSession = {
   id: string;
   session_id: string | null;
@@ -46,15 +48,17 @@ export default function HistoryDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-slate-500">Loading…</p>
+        <p className="text-[#9FB3C8]">Loading…</p>
       </div>
     );
   }
   if (!session) {
     return (
       <div className="space-y-4">
-        <p className="text-slate-600">Session not found.</p>
-        <Link href="/history" className="text-slate-600 underline hover:text-slate-900">Back to History</Link>
+        <p className="text-[#9FB3C8]">Session not found.</p>
+        <Link href="/history" className="text-[#1FD6A6] underline hover:brightness-110">
+          Back to History
+        </Link>
       </div>
     );
   }
@@ -62,30 +66,47 @@ export default function HistoryDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">Call detail</h1>
-        <Link href="/history" className="text-slate-600 underline hover:text-slate-900">← History</Link>
+        <h1 className="text-2xl font-semibold tracking-tight text-[#E6EEF6]">Call detail</h1>
+        <Link href="/history" className="text-[#9FB3C8] underline hover:text-[#E6EEF6]">
+          ← History
+        </Link>
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
-        <div className="grid gap-2 text-sm">
-          <p><span className="text-slate-500">Session ID:</span> {session.session_id ?? session.id}</p>
-          <p><span className="text-slate-500">Created:</span> {formatDate(session.created_at)}</p>
-          <p><span className="text-slate-500">Ended:</span> {formatDate(session.ended_at)}</p>
-          <p><span className="text-slate-500">Duration:</span> {session.call_duration != null ? `${session.call_duration}s` : "—"}</p>
-          <p><span className="text-slate-500">Caller:</span> {session.caller_number ?? "—"}</p>
-          <p><span className="text-slate-500">Tone:</span> {session.tone ?? "—"}</p>
-          <p><span className="text-slate-500">Risk:</span> {session.escalation_risk ?? "—"}</p>
+      <Card className="space-y-4 !p-6">
+        <div className="grid gap-2 text-sm text-[#E6EEF6]">
+          <p>
+            <span className="text-[#9FB3C8]">Session ID:</span> {session.session_id ?? session.id}
+          </p>
+          <p>
+            <span className="text-[#9FB3C8]">Created:</span> {formatDate(session.created_at)}
+          </p>
+          <p>
+            <span className="text-[#9FB3C8]">Ended:</span> {formatDate(session.ended_at)}
+          </p>
+          <p>
+            <span className="text-[#9FB3C8]">Duration:</span>{" "}
+            {session.call_duration != null ? `${session.call_duration}s` : "—"}
+          </p>
+          <p>
+            <span className="text-[#9FB3C8]">Caller:</span> {session.caller_number ?? "—"}
+          </p>
+          <p>
+            <span className="text-[#9FB3C8]">Tone:</span> {session.tone ?? "—"}
+          </p>
+          <p>
+            <span className="text-[#9FB3C8]">Risk:</span> {session.escalation_risk ?? "—"}
+          </p>
         </div>
         <div>
-          <h2 className="text-sm font-medium text-slate-700">Transcript</h2>
-          <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-sm text-slate-700">
+          <h2 className="text-sm font-medium text-[#E6EEF6]">Transcript</h2>
+          <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap rounded-[10px] border border-white/[0.06] bg-[#060D18] p-3 text-sm text-[#9FB3C8]">
             {session.transcript || "(none)"}
           </pre>
         </div>
         <div>
-          <h2 className="text-sm font-medium text-slate-700">AI response</h2>
-          <p className="mt-1 text-sm text-slate-700">{session.ai_response || "(none)"}</p>
+          <h2 className="text-sm font-medium text-[#E6EEF6]">AI response</h2>
+          <p className="mt-1 text-sm text-[#9FB3C8]">{session.ai_response || "(none)"}</p>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

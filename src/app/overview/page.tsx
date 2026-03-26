@@ -1,221 +1,126 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import {
-  PhoneCall,
-  Shield,
-  Gauge,
-  Heart,
-} from "lucide-react";
+import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 
-type CallHistoryRow = {
-  id: string;
-  created_at: string;
-  session_id: string | null;
-  transcript: string;
-  ai_response: string;
-  tone: string;
-  escalation_risk: string;
-  call_duration: number | null;
-  ended_at: string | null;
-};
+const GREETING_LINE = "Good afternoon, Kyra";
+const AVATAR_INITIALS = "KY";
+
+function formatHeaderDate(): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    }).format(new Date());
+  } catch {
+    return "Tuesday, March 24";
+  }
+}
 
 export default function OverviewPage() {
-  const [todayCount, setTodayCount] = useState(0);
-  const [riskAvertedCount, setRiskAvertedCount] = useState(0);
-  const [calmScore, setCalmScore] = useState<number | null>(null);
-  const [avgLatency, setAvgLatency] = useState<number | null>(null);
-  const [insight, setInsight] = useState("");
-  const [aiInsight, setAiInsight] = useState("");
-  const [aiSaves, setAiSaves] = useState(0);
-  const [escalationForecast, setEscalationForecast] = useState<"Low" | "Rising" | "High">("Low");
-  const [hasFetched, setHasFetched] = useState(false);
-
-  const fetchDashboardMetrics = useCallback(async () => {
-    try {
-      const res = await fetch("/api/call-history", { cache: "no-store" });
-      if (!res.ok) {
-        setHasFetched(true);
-        setInsight("Could not load metrics.");
-        setCalmScore(null);
-        setAvgLatency(null);
-        return;
-      }
-      const raw = await res.json();
-      const data: CallHistoryRow[] = Array.isArray(raw) ? raw : (raw?.sessions ?? []);
-      setHasFetched(true);
-
-      const sessions = data ?? [];
-      const today = new Date().toISOString().slice(0, 10);
-      const todaysSessions = sessions.filter((session) =>
-        (session.created_at || "").startsWith(today)
-      );
-      setTodayCount(todaysSessions.length);
-
-      const riskAverted = sessions.filter(
-        (s) => (s.escalation_risk || "").toLowerCase() !== "high"
-      );
-      setRiskAvertedCount(riskAverted.length);
-
-      if (sessions.length === 0) {
-        setCalmScore(null);
-        setAvgLatency(null);
-      } else {
-        let score = 100;
-        sessions.forEach((session) => {
-          const risk = (session.escalation_risk || "").toLowerCase();
-          if (risk === "high") score -= 12;
-          if (risk === "medium") score -= 6;
-        });
-        if (score < 0) score = 0;
-        setCalmScore(score);
-
-        const responseTimes = sessions.map((s) => s.call_duration || 0);
-        const avgResponse =
-          responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length;
-        setAvgLatency(Math.round(avgResponse * 10) / 10);
-      }
-
-      const triggers = {
-        billing: 0,
-        refund: 0,
-        cancel: 0,
-        manager: 0,
-        complaint: 0,
-        delay: 0,
-      };
-      sessions.forEach((session) => {
-        const text = (session.transcript || "").toLowerCase();
-        if (text.includes("billing")) triggers.billing++;
-        if (text.includes("refund")) triggers.refund++;
-        if (text.includes("cancel")) triggers.cancel++;
-        if (text.includes("manager")) triggers.manager++;
-        if (text.includes("complaint")) triggers.complaint++;
-        if (text.includes("delay")) triggers.delay++;
-      });
-
-      let saves = 0;
-      sessions.forEach((session) => {
-        const risk = (session.escalation_risk || "").toLowerCase();
-        if (risk === "medium" && session.ai_response) saves++;
-      });
-      setAiSaves(saves);
-
-      let forecast: "Low" | "Rising" | "High" = "Low";
-      if (triggers.manager > 3) forecast = "High";
-      else if (triggers.refund + triggers.billing > 5) forecast = "Rising";
-      setEscalationForecast(forecast);
-
-      let insightText = "";
-      if (sessions.length === 0) {
-        insightText = "No call data yet. Complete a live session to see insights.";
-      } else {
-        const { billing, refund, cancel, manager } = triggers;
-        if (billing > refund && billing > cancel) {
-          insightText =
-            "Billing disputes are currently the most common escalation trigger across recent calls.";
-        } else if (refund > billing) {
-          insightText =
-            "Refund requests are driving the majority of escalation risk.";
-        } else if (manager > 0) {
-          insightText =
-            "Customers are requesting managers more frequently during current sessions.";
-        } else {
-          insightText =
-            "Customer sentiment across recent calls appears stable.";
-        }
-      }
-      setInsight(insightText);
-
-      const aiInsightText =
-        sessions.length === 0
-          ? ""
-          : "Calmline AI responses helped de-escalate " + saves + " conversations.";
-      setAiInsight(aiInsightText);
-    } catch (err) {
-      console.error("[overview] fetch metrics error:", err);
-      setHasFetched(true);
-      setInsight("Could not load metrics.");
-      setCalmScore(null);
-      setAvgLatency(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchDashboardMetrics();
-    const interval = setInterval(fetchDashboardMetrics, 10000);
-    return () => clearInterval(interval);
-  }, [fetchDashboardMetrics]);
-
-  const metricCards = [
-    {
-      label: "Today's Sessions",
-      value: String(todayCount),
-      sub: "live calls",
-      Icon: PhoneCall,
-    },
-    {
-      label: "Escalation Risk Averted",
-      value: String(riskAvertedCount),
-      sub: "this week",
-      Icon: Shield,
-    },
-    {
-      label: "Calm Score",
-      value: calmScore != null ? `${calmScore} / 100` : "—",
-      sub: "escalation outcomes",
-      Icon: Heart,
-    },
-    {
-      label: "AI Response Speed",
-      value: avgLatency != null ? `${avgLatency}s` : "—",
-      sub: "suggestion speed",
-      Icon: Gauge,
-    },
-  ];
+  const subline = `${formatHeaderDate()} · Your activity will appear here once calls are active`;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <section className="border-b border-slate-200 pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-          Overview
-        </h1>
-        <p className="mt-1 text-sm text-slate-700">
-          Real-time escalation prevention for customer support teams.
-        </p>
-      </section>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-        {metricCards.map(({ label, value, sub, Icon }) => (
+    <div className="mx-auto max-w-7xl px-6">
+      {/* Top header */}
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.06] pb-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-[#E6EEF6]">{GREETING_LINE}</h1>
+          <p className="mt-1 text-sm text-[#9FB3C8]">{subline}</p>
+        </div>
+        <div className="relative shrink-0">
           <div
-            key={label}
-            className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-white/[0.12] to-white/[0.04] text-sm font-semibold text-[#E6EEF6] ring-1 ring-white/[0.08]"
+            aria-hidden
           >
-            <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
-              <Icon className="h-4 w-4 text-slate-500" />
-            </div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              {label}
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
-            <p className="mt-0.5 text-xs text-slate-500">{sub}</p>
+            {AVATAR_INITIALS}
           </div>
-        ))}
+          <span
+            className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#0B141F] bg-[#1FD6A6]"
+            title="Available"
+            aria-hidden
+          />
+        </div>
       </div>
 
-      {/* Calmline Intelligence */}
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-sm font-semibold text-slate-900">
-          Calmline Intelligence
-        </h2>
-        <p className="text-sm text-slate-700">
-          {hasFetched ? (insight || "No insights yet.") : "Loading…"}
-        </p>
-        <p className="mt-2 text-sm text-slate-700">
-          {hasFetched ? (aiInsight || "No AI de-escalation data yet.") : "Loading…"}
-        </p>
+      {/* Stats grid */}
+      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="!p-6 hover:!translate-y-0">
+          <p className="text-xl font-bold text-[#E6EEF6]">—</p>
+          <p className="mt-1 text-sm text-[#9FB3C8]">Status will update during active sessions</p>
+        </Card>
+        <Card className="!p-6 hover:!translate-y-0">
+          <p className="text-sm text-[#9FB3C8]">Calls today</p>
+          <p className="mt-1 text-xl font-bold text-[#E6EEF6]">—</p>
+          <p className="mt-1 text-sm text-[#9FB3C8]">Calls will appear once activity begins</p>
+        </Card>
+        <Card className="!p-6 hover:!translate-y-0">
+          <p className="text-sm text-[#9FB3C8]">Avg handle time</p>
+          <p className="mt-1 text-xl font-bold text-[#E6EEF6]">—</p>
+          <p className="mt-1 text-sm text-[#9FB3C8]">Average will calculate automatically</p>
+        </Card>
+        <Card className="!p-6 hover:!translate-y-0">
+          <p className="text-sm text-[#9FB3C8]">CSAT today</p>
+          <p className="mt-1 text-xl font-bold text-[#E6EEF6]">—</p>
+          <p className="mt-1 text-sm text-[#9FB3C8]">Customer feedback will populate here</p>
+        </Card>
+      </div>
+
+      {/* Main grid */}
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+        {/* Left: Today's calls */}
+        <Card className="flex flex-col !p-6 hover:!translate-y-0">
+          <CardHeader className="mb-0">
+            <h2 className="text-lg font-semibold text-[#E6EEF6]">Today&apos;s calls</h2>
+          </CardHeader>
+          <CardContent className="mt-3">
+            <div className="flex min-h-[280px] flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.06] bg-white/[0.02] px-6 py-8 text-center">
+              <p className="text-base font-medium text-[#E6EEF6]">No calls yet</p>
+              <p className="mt-2 max-w-sm text-sm text-[#9FB3C8]">
+                Your active and completed calls will appear here
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Right column */}
+        <div className="space-y-8">
+          <Card className="!p-6 hover:!translate-y-0">
+            <CardHeader className="mb-0">
+              <h2 className="text-lg font-semibold text-[#E6EEF6]">Activity timeline</h2>
+            </CardHeader>
+            <CardContent className="mt-3">
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
+                <p className="text-sm leading-relaxed text-[#9FB3C8]">
+                  Your call activity will appear here throughout your shift
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="!p-6 hover:!translate-y-0">
+            <CardHeader className="mb-0">
+              <h2 className="text-lg font-semibold text-[#E6EEF6]">Next in queue</h2>
+            </CardHeader>
+            <CardContent className="mt-3 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-[#E6EEF6]">No incoming calls</p>
+                <p className="mt-1 text-sm text-[#9FB3C8]">
+                  When a call is available, it will appear here
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex cursor-not-allowed rounded-[10px] bg-white/[0.08] px-5 py-2 text-sm font-medium text-[#9FB3C8]"
+                >
+                  Answer
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

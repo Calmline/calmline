@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 next dev",
-    "dev:clean": "rm -rf .next && WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 next dev",
+    "dev": "WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 node server.js",
+    "dev:clean": "rm -rf .next && WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 node server.js",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_ENV=production node server.js",
     "lint": "next lint",
     "ws-server": "node server/ws-server.js"
   },

@@ -13,7 +13,7 @@ export function Navbar() {
           href="/"
           className="text-xl font-bold tracking-tight text-heading transition hover:text-charcoal"
         >
-          Calmline
+          CalmLine
         </Link>
         <div className="flex items-center gap-12">
           <Link

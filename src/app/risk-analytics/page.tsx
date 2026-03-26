@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Card } from "@/components/ui/Card";
 
 type RiskAnalyticsData = {
   totalCalls: number;
@@ -53,114 +54,114 @@ export default function RiskAnalyticsPage() {
   const isEmpty = !loading && !error && data !== null && data.totalCalls === 0;
 
   return (
-    <div className="p-6 md:p-8">
-      <h1 className="text-2xl font-semibold text-heading mb-6">
+    <div>
+      <h1 className="mb-4 text-2xl font-semibold tracking-tight text-[#E6EEF6]">
         Risk Analytics
       </h1>
 
       {loading && (
-        <div className="flex items-center justify-center py-16 text-muted">
+        <div className="flex items-center justify-center py-16 text-[#9FB3C8]">
           Loading analytics…
         </div>
       )}
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">
+        <div className="rounded-[10px] border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200">
           {error}
         </div>
       )}
 
       {isEmpty && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-center text-muted">
-          No analytics data yet. Data will appear as calls are processed.
-        </div>
+        <Card className="px-4 py-6 text-center hover:!translate-y-0">
+          <p className="text-[#9FB3C8]">
+            No analytics data yet. Data will appear as calls are processed.
+          </p>
+        </Card>
       )}
 
       {!loading && !error && (data === null || data.totalCalls > 0) && (
         <div className="space-y-6">
-          {/* KPI Summary Cards */}
           <section>
-            <h2 className="text-sm font-medium text-muted mb-3">
+            <h2 className="mb-3 text-sm font-medium text-[#9FB3C8]">
               KPI Summary
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-muted">Total Calls</p>
-                <p className="text-xl font-semibold text-heading mt-1">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Card className="!p-4 hover:!translate-y-0">
+                <p className="text-sm text-[#9FB3C8]">Total Calls</p>
+                <p className="mt-1 text-xl font-semibold text-[#E6EEF6]">
                   {data?.totalCalls ?? "—"}
                 </p>
-              </div>
-              <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-muted">Escalation Rate</p>
-                <p className="text-xl font-semibold text-heading mt-1">
+              </Card>
+              <Card className="!p-4 hover:!translate-y-0">
+                <p className="text-sm text-[#9FB3C8]">Escalation Rate</p>
+                <p className="mt-1 text-xl font-semibold text-[#E6EEF6]">
                   {data != null ? `${data.escalationRate}%` : "—"}
                 </p>
-              </div>
-              <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-muted">Avg Escalation Risk</p>
-                <p className="text-xl font-semibold text-heading mt-1">
+              </Card>
+              <Card className="!p-4 hover:!translate-y-0">
+                <p className="text-sm text-[#9FB3C8]">Avg Escalation Risk</p>
+                <p className="mt-1 text-xl font-semibold text-[#E6EEF6]">
                   {data != null ? data.avgEscalationRisk.toFixed(1) : "—"}
                 </p>
-              </div>
-              <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-muted">Avg Complaint Risk</p>
-                <p className="text-xl font-semibold text-heading mt-1">
+              </Card>
+              <Card className="!p-4 hover:!translate-y-0">
+                <p className="text-sm text-[#9FB3C8]">Avg Complaint Risk</p>
+                <p className="mt-1 text-xl font-semibold text-[#E6EEF6]">
                   {data != null ? data.avgComplaintRisk.toFixed(1) : "—"}
                 </p>
-              </div>
+              </Card>
             </div>
           </section>
 
-          {/* Escalation Trend Chart (placeholder) */}
           <section>
-            <h2 className="text-sm font-medium text-muted mb-3">
+            <h2 className="mb-3 text-sm font-medium text-[#9FB3C8]">
               Escalation Trend
             </h2>
-            <div
-              className="rounded-lg border border-gray-200 bg-gray-50 h-64 flex items-center justify-center text-muted"
+            <Card
+              className="flex h-64 items-center justify-center hover:!translate-y-0"
               aria-hidden
             >
-              Chart placeholder
-            </div>
+              <span className="text-sm text-[#6B859F]">Chart placeholder</span>
+            </Card>
           </section>
 
-          {/* Escalation Distribution (placeholder) */}
           <section>
-            <h2 className="text-sm font-medium text-muted mb-3">
+            <h2 className="mb-3 text-sm font-medium text-[#9FB3C8]">
               Escalation Distribution
             </h2>
-            <div
-              className="rounded-lg border border-gray-200 bg-gray-50 h-48 flex items-center justify-center text-muted"
+            <Card
+              className="flex h-48 items-center justify-center hover:!translate-y-0"
               aria-hidden
             >
-              Distribution placeholder
-            </div>
+              <span className="text-sm text-[#6B859F]">Distribution placeholder</span>
+            </Card>
           </section>
 
-          {/* Top Risk Drivers list */}
           <section>
-            <h2 className="text-sm font-medium text-muted mb-3">
+            <h2 className="mb-3 text-sm font-medium text-[#9FB3C8]">
               Top Risk Drivers
             </h2>
-            <ul className="rounded-lg border border-gray-200 bg-white divide-y divide-gray-200">
-              {(data?.topTriggers?.length
-                ? data.topTriggers
-                : []
-              ).map((item, i) => (
-                <li
-                  key={`${item.trigger}-${i}`}
-                  className="flex items-center justify-between px-4 py-3"
-                >
-                  <span className="text-heading">{item.trigger}</span>
-                  <span className="text-muted text-sm">{item.count}</span>
-                </li>
-              ))}
-              {data != null && data.topTriggers.length === 0 && (
-                <li className="px-4 py-6 text-center text-muted text-sm">
-                  No triggers recorded
-                </li>
-              )}
-            </ul>
+            <Card className="!p-0 overflow-hidden hover:!translate-y-0">
+              <ul className="divide-y divide-white/[0.06]">
+                {(data?.topTriggers?.length
+                  ? data.topTriggers
+                  : []
+                ).map((item, i) => (
+                  <li
+                    key={`${item.trigger}-${i}`}
+                    className="flex items-center justify-between px-4 py-3"
+                  >
+                    <span className="text-[#E6EEF6]">{item.trigger}</span>
+                    <span className="text-sm text-[#9FB3C8]">{item.count}</span>
+                  </li>
+                ))}
+                {data != null && data.topTriggers.length === 0 && (
+                  <li className="px-4 py-6 text-center text-sm text-[#9FB3C8]">
+                    No triggers recorded
+                  </li>
+                )}
+              </ul>
+            </Card>
           </section>
         </div>
       )}

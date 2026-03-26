@@ -27,6 +27,21 @@ const DG_RECONNECT_BACKOFF_MS = [250, 500, 1000, 2000];
 const uiClients = new Set<WebSocket>();
 const UI_HEARTBEAT_INTERVAL_MS = 15_000;
 
+/** Latest Pre-Call Armor brief; replayed to UI clients that connect after /precall ran. */
+let lastPrecallData: Record<string, unknown> | null = null;
+
+type TransferBriefBody = {
+  caller: string;
+  agentName: string;
+  issue: string;
+  attempt: string;
+  outcome: string;
+  risk: "LOW" | "MEDIUM" | "HIGH";
+};
+
+/** Latest transfer briefing; replayed to UI clients that connect after POST /transfer. */
+let lastTransferData: TransferBriefBody | null = null;
+
 function broadcastToUI(type: string, payload: Record<string, unknown> = {}): void {
   const message = JSON.stringify({ type, ...payload });
 
@@ -476,6 +491,105 @@ function createHttpServer(): http.Server {
       return;
     }
     const pathname = req.url?.split("?")[0] ?? "";
+    if (pathname === "/precall" && req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk.toString();
+      });
+      req.on("end", () => {
+        try {
+          const parsed = body ? JSON.parse(body) as { from?: string; timestamp?: number } : {};
+          const number = (parsed.from || "unknown").trim() || "unknown";
+          console.log(`[precall] incoming call from ${number}`);
+
+          const precallBriefPayload = {
+            risk: "LOW",
+            context: "No prior history. First-time caller.",
+            waitTime: "0 seconds",
+            opening: "Thank you for calling, how can I help you today?",
+          };
+          lastPrecallData = precallBriefPayload;
+
+          // Stub pipeline: broadcast initial Pre-Call Armor brief to all connected UI clients.
+          broadcastToUI("precall_brief", precallBriefPayload);
+
+          uiClients.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: "precall",
+                data: {
+                  from: parsed.from,
+                  risk: "HIGH",
+                  summary: "Caller has prior escalation history",
+                  opening: "Hi, I understand this has been frustrating. I’m here to help.",
+                },
+              }));
+            }
+          });
+          console.log("[precall] broadcast sent");
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
+        } catch (err) {
+          console.error("[precall] invalid payload", err);
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "Invalid JSON payload" }));
+        }
+      });
+      return;
+    }
+    if (pathname === "/transfer" && req.method === "POST") {
+      let raw = "";
+      req.on("data", (chunk) => {
+        raw += chunk.toString();
+      });
+      req.on("end", () => {
+        try {
+          const body = raw
+            ? (JSON.parse(raw) as Record<string, unknown>)
+            : {};
+          console.log("[transfer] incoming transfer", body);
+
+          const transferBody: TransferBriefBody = {
+            caller: String(body.caller ?? ""),
+            agentName: String(body.agentName ?? ""),
+            issue: String(body.issue ?? ""),
+            attempt: String(body.attempt ?? ""),
+            outcome: String(body.outcome ?? ""),
+            risk:
+              body.risk === "LOW" ||
+              body.risk === "MEDIUM" ||
+              body.risk === "HIGH"
+                ? body.risk
+                : "LOW",
+          };
+          lastTransferData = transferBody;
+
+          uiClients.forEach((ws) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(
+                  JSON.stringify({
+                    type: "transfer_brief",
+                    data: transferBody,
+                  }),
+                );
+              } catch (sendErr) {
+                console.error("[transfer] ws.send error", sendErr);
+              }
+            }
+          });
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
+        } catch (err) {
+          console.error("[transfer] invalid payload", err);
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false, error: "Invalid JSON payload" }));
+        }
+      });
+      return;
+    }
     if (pathname === "/api/twilio/voice" && req.method === "POST") {
       let host = getHost(req);
       if (host.includes("localhost") || host.startsWith("127.0.0.1")) {
@@ -554,6 +668,33 @@ function runServer(): void {
     });
     uiClients.add(ws);
     console.log(`[ui] CONNECT id=${socketId} clients=${uiClients.size}`);
+
+    if (lastPrecallData) {
+      try {
+        ws.send(
+          JSON.stringify({
+            type: "precall_brief",
+            data: lastPrecallData,
+          }),
+        );
+      } catch (err) {
+        console.error("[ui] failed to send replayed precall_brief", err);
+      }
+    }
+
+    if (lastTransferData) {
+      try {
+        ws.send(
+          JSON.stringify({
+            type: "transfer_brief",
+            data: lastTransferData,
+          }),
+        );
+      } catch (err) {
+        console.error("[ui] failed to send replayed transfer_brief", err);
+      }
+    }
+
     ws.on("close", (code, reason) => {
       uiClients.delete(ws);
       const safeReason =
@@ -1358,6 +1499,7 @@ function runServer(): void {
   });
 
   server.listen(PORT, () => {
+    console.log("[gateway] running on port 8787");
     console.log(
       "[boot] DEEPGRAM_API_KEY present:",
       Boolean(process.env.DEEPGRAM_API_KEY),
