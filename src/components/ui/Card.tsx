@@ -1,24 +1,28 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes } from "react";
 
-type CardProps = {
-  children: ReactNode;
-  className?: string;
-};
-
-export function Card({ children, className = "" }: CardProps) {
+export function Card({ className = "", children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={`rounded-2xl border border-white/[0.06] bg-gradient-to-b from-[#0F1C2B] to-[#0B1623] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.35)] transition-all duration-200 ease-out hover:-translate-y-px hover:border-white/[0.1] hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)] md:p-5 ${className}`}
+      className={`rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-[#E6EEF6] shadow-sm transition hover:border-white/[0.12] hover:-translate-y-0.5 ${className}`}
+      {...props}
     >
       {children}
     </div>
   );
 }
 
-export function CardHeader({ children, className = "" }: CardProps) {
-  return <div className={`mb-3 ${className}`}>{children}</div>;
+export function CardHeader({ className = "", children, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={`flex flex-col space-y-1.5 ${className}`} {...props}>
+      {children}
+    </div>
+  );
 }
 
-export function CardContent({ children, className = "" }: CardProps) {
-  return <div className={className}>{children}</div>;
+export function CardContent({ className = "", children, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={className} {...props}>
+      {children}
+    </div>
+  );
 }

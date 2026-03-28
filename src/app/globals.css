@@ -137,6 +137,16 @@ body::before {
   box-shadow: 0 0 0 2px white, 0 0 0 4px rgb(148 163 184 / 0.4);
 }
 
+.sidebar-section {
+  margin-bottom: 0.5rem;
+  padding-left: 0.25rem;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgb(107 133 159 / 0.7);
+}
+
 .sidebar-item {
   display: flex;
   align-items: center;
@@ -145,16 +155,16 @@ body::before {
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
   font-weight: 500;
-  color: #475569;
+  color: #9fb3c8;
   transition: all 200ms ease-out;
 }
 .sidebar-item:hover {
-  background: #f8fafc;
-  color: #0f172a;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e6eef6;
 }
 .sidebar-item.active {
-  background: rgba(15, 118, 110, 0.1);
-  color: #0F766E;
+  background: rgba(34, 199, 201, 0.12);
+  color: #22c7c9;
   font-weight: 500;
 }
 .sidebar-item .shrink-0 {

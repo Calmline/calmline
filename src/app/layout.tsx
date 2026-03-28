@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { DashboardLayout } from "@/components/DashboardLayout";
+import { AppShell } from "@/components/layout/AppShell";
 import "./globals.css";
 
 const inter = Inter({
@@ -22,9 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-[#0B141F] font-sans antialiased text-[#E6EEF6]">
-        <div className="min-h-screen bg-[#0B141F] text-[#E6EEF6]">
-          <DashboardLayout>{children}</DashboardLayout>
-        </div>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

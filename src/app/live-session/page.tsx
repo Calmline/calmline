@@ -4,7 +4,14 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { ChevronDown } from "lucide-react";
 import { useAppStatus } from "@/context/AppStatusContext";
 import { useRole } from "@/context/RoleContext";
-import { Card } from "@/components/ui/Card";
+
+const globalForWS = globalThis as typeof globalThis & {
+  __calmline_socket: WebSocket | null;
+};
+
+if (!globalForWS.__calmline_socket) {
+  globalForWS.__calmline_socket = null;
+}
 
 type PrecallBrief = {
   type: "precall_brief";
@@ -128,7 +135,6 @@ export default function LiveSessionPage() {
   const [coachStatus, setCoachStatus] = useState("Listening");
   const responseLockedRef = useRef(false);
   const lastResponseTimeRef = useRef(0);
-  const wsRef = useRef<WebSocket | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const prevTranscriptLenRef = useRef(0);
   const sessionStartedRef = useRef(false);
@@ -145,7 +151,163 @@ export default function LiveSessionPage() {
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [callerNumber, setCallerNumber] = useState<string | null>(null);
-  const isActiveCall = sessionPhase === "active";
+  const [callState, setCallState] = useState<"idle" | "incoming" | "active">("idle");
+  const [incomingCall, setIncomingCall] = useState<Record<string, unknown> | null>(null);
+  const isActiveCall = callState === "active" || sessionPhase === "active";
+
+  useEffect(() => {
+    setCallState("idle");
+    setIncomingCall(null);
+    setSessionPhase("idle");
+    setCallActive(false);
+  }, []);
+
+  useEffect(() => {
+    let socket = globalForWS.__calmline_socket;
+    if (socket && socket.readyState === WebSocket.CLOSED) {
+      globalForWS.__calmline_socket = null;
+      socket = null;
+    }
+
+    if (!globalForWS.__calmline_socket) {
+      console.log("🚀 Creating ONE GLOBAL WebSocket");
+      const s = new WebSocket("ws://127.0.0.1:8787/ui");
+      globalForWS.__calmline_socket = s;
+      s.onclose = () => {
+        console.warn("⚠️ Socket closed");
+        globalForWS.__calmline_socket = null;
+      };
+    } else {
+      console.log("✅ Using existing global socket");
+    }
+
+    socket = globalForWS.__calmline_socket!;
+
+    socket.onopen = () => {
+      console.log("✅ GLOBAL WebSocket OPEN");
+    };
+
+    socket.onerror = (err) => {
+      console.error("❌ WebSocket error", err);
+    };
+
+    socket.onmessage = (event) => {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(event.data as string) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+      console.log("📩 EVENT:", data);
+
+      if (data.type === "precall_brief") {
+        setCallState("incoming");
+        setIncomingCall(data);
+        const nested =
+          data.data && typeof data.data === "object"
+            ? (data.data as Record<string, unknown>)
+            : null;
+        if (nested) {
+          setPrecall({
+            type: "precall_brief",
+            risk: typeof nested.risk === "string" ? nested.risk : undefined,
+            context:
+              typeof nested.context === "string" ? nested.context : undefined,
+            waitTime:
+              typeof nested.waitTime === "string" ? nested.waitTime : undefined,
+            opening:
+              typeof nested.opening === "string" ? nested.opening : undefined,
+          });
+        } else {
+          setPrecall(data as PrecallBrief);
+        }
+        setSessionPhase("armed");
+        setConnection("connecting");
+      }
+
+      if (data.type === "call_started") {
+        setCallState("active");
+        setSessionPhase("active");
+        setCallActive(true);
+        setConnection("connected");
+      }
+
+      if (data.type === "call_ended") {
+        setCallState("idle");
+        setIncomingCall(null);
+        setSessionPhase("idle");
+        setCallActive(false);
+        setConnection("disconnected");
+      }
+
+      if (data.type === "call_state") {
+        if (data.state === "active") {
+          setCallActive(true);
+          setPrecallData(null);
+          setTransferData(null);
+          setRoleAndPersist("agent");
+        }
+        setPrecall(null);
+        setSessionPhase("active");
+        setCallState("active");
+        setConnection("connected");
+        if (typeof data.from === "string" && data.from.trim().length > 0) {
+          setCallerNumber((prev) => {
+            if (prev) return prev;
+            if (typeof data?.from === "string") return data.from;
+            return "";
+          });
+        }
+      }
+
+      if (data.type === "incoming_call" || data.type === "incoming-call") {
+        setSessionPhase("armed");
+        setCallState("incoming");
+        setIncomingCall(data);
+        setConnection("connecting");
+        if (typeof data.phone === "string" && data.phone.trim().length > 0) {
+          setCallerNumber(data.phone);
+        }
+        if (typeof data.from === "string" && data.from.trim().length > 0) {
+          setCallerNumber(data.from);
+        }
+      }
+
+      if (data.type === "precall") {
+        const payload =
+          data.data && typeof data.data === "object"
+            ? (data.data as PrecallOverlayData)
+            : null;
+        if (payload) setPrecallData(payload);
+      }
+
+      if (data.type === "transcript" && data.text) {
+        const line = typeof data.text === "string" ? data.text : String(data.text);
+        setTranscriptLines((prev) => [...prev, line]);
+        setSessionTranscript((prev) => [...prev, line]);
+      }
+
+      if (data.type === "conversation_state") {
+        if (data.transcript && Array.isArray(data.transcript)) {
+          setTranscriptLines(data.transcript);
+          setSessionTranscript(data.transcript);
+        }
+      }
+
+      if (data.type === "coach_final" || data.type === "coach") {
+        const text = data.message || data.text;
+        if (text) {
+          const response = typeof text === "string" ? text : String(text);
+          setCoachText(response);
+          setAiResponses((prev) => [...prev, response]);
+        }
+      }
+    };
+
+    return () => {
+      console.log("Skipping socket cleanup");
+    };
+  }, []);
 
   useEffect(() => {
     if (sessionPhase !== "active" || sessionStartTime == null) return;
@@ -162,11 +324,13 @@ export default function LiveSessionPage() {
   }, [sessionStartTime, callTicker]);
 
   const callStatusPrimary =
-    sessionPhase === "active"
+    callState === "active"
       ? `Call in progress • ${elapsedLabel}`
-      : sessionPhase === "armed"
-        ? "Connecting to call…"
-        : "No active call";
+      : callState === "incoming"
+        ? "Incoming call…"
+        : sessionPhase === "armed"
+          ? "Connecting to call…"
+          : "Ready";
 
   const displayCaller = useMemo(() => {
     const fromPrecall = (preCallData as { caller?: string } | null)?.caller;
@@ -205,23 +369,23 @@ export default function LiveSessionPage() {
   }, [precall, precallData]);
 
   const sessionStatusDisplay =
-    sessionPhase === "idle"
-      ? "Ready to start session"
-      : sessionPhase === "armed"
-        ? "Waiting for live call…"
-        : sessionPhase === "active"
-          ? "Call in progress"
-          : "Session ended";
+    callState === "active"
+      ? "Call in progress"
+      : callState === "incoming"
+        ? "Incoming call"
+        : sessionPhase === "armed"
+          ? "Waiting for live call…"
+          : "Ready to start session";
   const statusDisplay =
-    sessionPhase === "active"
+    callState === "active"
       ? "Connected"
-      : sessionPhase === "armed"
-        ? "Connecting..."
-        : sessionPhase === "idle"
-          ? "Ready"
-          : "Ended";
+      : callState === "incoming"
+        ? "Incoming"
+        : "Ready";
 
   const startSession = useCallback(() => {
+    setCallState("idle");
+    setIncomingCall(null);
     setCallActive(true);
     setPrecall(null);
     setPrecallData(null);
@@ -308,8 +472,10 @@ export default function LiveSessionPage() {
     setSessionStartTime(null);
     setSessionId(null);
     setCallerNumber(null);
-    setSessionPhase("ended");
+    setSessionPhase("idle");
     setCallActive(false);
+    setCallState("idle");
+    setIncomingCall(null);
     setTransferData(null);
     setPreCallData(null);
     setRoleAndPersist("agent");
@@ -333,123 +499,6 @@ export default function LiveSessionPage() {
   ]);
 
   useEffect(() => {
-    const existing = wsRef.current;
-    if (
-      existing &&
-      (existing.readyState === WebSocket.OPEN ||
-        existing.readyState === WebSocket.CONNECTING)
-    ) {
-      return;
-    }
-
-    const socket = new WebSocket("ws://localhost:8787/ui");
-    wsRef.current = socket;
-
-    socket.onopen = () => {
-      console.log("[UI] connected to gateway");
-    };
-
-    socket.onmessage = (event) => {
-      console.log("[UI] message:", event.data);
-      let data: Record<string, unknown> = {};
-      try {
-        data = JSON.parse(event.data as string) as Record<string, unknown>;
-        console.log("[live-session] WebSocket onmessage type=", data?.type, data);
-      } catch (_) {
-        console.log("[live-session] WebSocket onmessage (parse failed)", event.data);
-      }
-
-      if (data.type === "call_state") {
-        if (data.state === "active") {
-          setCallActive(true);
-          setPrecallData(null);
-          setTransferData(null);
-          setRoleAndPersist("agent");
-        }
-        setPrecall(null);
-        setSessionPhase("active");
-        setConnection("connected");
-        if (typeof data.from === "string" && data.from.trim().length > 0) {
-          setCallerNumber((prev) => {
-            if (prev) return prev;
-            if (typeof data?.from === "string") return data.from;
-            return "";
-          });
-        }
-      }
-
-      if (data.type === "precall_brief") {
-        const nested =
-          data.data && typeof data.data === "object"
-            ? (data.data as Record<string, unknown>)
-            : null;
-        if (nested) {
-          setPrecall({
-            type: "precall_brief",
-            risk: typeof nested.risk === "string" ? nested.risk : undefined,
-            context:
-              typeof nested.context === "string" ? nested.context : undefined,
-            waitTime:
-              typeof nested.waitTime === "string" ? nested.waitTime : undefined,
-            opening:
-              typeof nested.opening === "string" ? nested.opening : undefined,
-          });
-        } else {
-          setPrecall(data as PrecallBrief);
-        }
-      }
-
-      if (data.type === "precall") {
-        const payload =
-          data.data && typeof data.data === "object"
-            ? (data.data as PrecallOverlayData)
-            : null;
-        if (payload) setPrecallData(payload);
-      }
-
-      if (data.type === "transcript" && data.text) {
-        const line = typeof data.text === "string" ? data.text : String(data.text);
-        setTranscriptLines((prev) => [...prev, line]);
-        setSessionTranscript((prev) => [...prev, line]);
-      }
-
-      if (data.type === "conversation_state") {
-        if (data.transcript && Array.isArray(data.transcript)) {
-          setTranscriptLines(data.transcript);
-          setSessionTranscript(data.transcript);
-        }
-      }
-
-      if (data.type === "coach_final" || data.type === "coach") {
-        const text = data.message || data.text;
-        if (text) {
-          const response = typeof text === "string" ? text : String(text);
-          setCoachText(response);
-          setAiResponses((prev) => [...prev, response]);
-        }
-      }
-    };
-
-    socket.onerror = (err) => {
-      console.error("[live-session] WebSocket onerror", err);
-    };
-
-    socket.onclose = (ev) => {
-      console.log("[live-session] WebSocket onclose code=", ev.code, "reason=", ev.reason);
-      if (wsRef.current === socket) {
-        wsRef.current = null;
-      }
-    };
-
-    return () => {
-      socket.close();
-      if (wsRef.current === socket) {
-        wsRef.current = null;
-      }
-    };
-  }, [setRoleAndPersist]);
-
-  useEffect(() => {
     if (transcriptRef.current) {
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
     }
@@ -467,9 +516,13 @@ export default function LiveSessionPage() {
 
   const showGeneratingStatus =
     aiThinking ||
-    (sessionPhase === "active" && transcriptLines.length > 0 && !coachText);
+    ((callState === "active" || sessionPhase === "active") &&
+      transcriptLines.length > 0 &&
+      !coachText);
   const showListeningStatus =
-    sessionPhase === "active" && listeningPulse && !showGeneratingStatus;
+    (callState === "active" || sessionPhase === "active") &&
+    listeningPulse &&
+    !showGeneratingStatus;
 
   const copyScript = useCallback(async () => {
     if (!coachText.trim()) return;
@@ -483,10 +536,10 @@ export default function LiveSessionPage() {
   }, [coachText]);
 
   return (
-    <div className="space-y-8 -mx-6 mb-0 min-h-[calc(100vh-2rem)] bg-transparent">
+    <div className="space-y-4 min-h-[calc(100vh-2rem)] bg-transparent">
       <div className="mb-4 flex items-center justify-between gap-4 px-0">
-        <h1 className="text-2xl font-semibold tracking-tight text-[#E6EEF6]">Live Session</h1>
-        {sessionPhase === "armed" && (
+        <h1 className="text-xl font-semibold tracking-tight text-[#E6EEF6]">Live Session</h1>
+        {callState === "incoming" && (
           <span
             className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
             style={{ background: "rgba(245,158,11,0.15)", color: "#B45309" }}
@@ -495,10 +548,10 @@ export default function LiveSessionPage() {
               className="h-1.5 w-1.5 rounded-full"
               style={{ background: "#F59E0B" }}
             />
-            Connecting...
+            Incoming
           </span>
         )}
-        {sessionPhase === "active" && (
+        {callState === "active" && (
           <span
             className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
             style={{ background: "rgba(34,199,201,0.15)", color: "#0F766E" }}
@@ -511,6 +564,31 @@ export default function LiveSessionPage() {
           </span>
         )}
       </div>
+
+      {callState === "incoming" && (
+        <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3">
+          <h3 className="text-lg font-semibold text-[#E6EEF6]">Incoming Call</h3>
+          <p className="mt-1 text-sm text-[#9FB3C8]">
+            {String(
+              (typeof incomingCall?.from === "string" && incomingCall.from) ||
+                (typeof incomingCall?.phone === "string" && incomingCall.phone) ||
+                "—",
+            )}
+          </p>
+        </div>
+      )}
+
+      {callState === "active" && (
+        <div className="mb-4 rounded-xl border border-teal-400/40 bg-teal-500/10 px-4 py-3">
+          <h3 className="text-lg font-semibold text-[#E6EEF6]">Call in Progress</h3>
+        </div>
+      )}
+
+      {callState === "idle" && sessionPhase === "idle" && (
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-gray-400">
+          No active call
+        </div>
+      )}
 
       {role === "agent" && (
         <>
@@ -615,7 +693,7 @@ export default function LiveSessionPage() {
         risk={isActiveCall ? (riskLevel || risk) : "-"}
       />
 
-      <div className="mb-6 flex w-full flex-wrap items-start justify-between gap-4 rounded-2xl border border-emerald-400/20 bg-gradient-to-r from-emerald-500/20 to-teal-500/10 px-6 py-4 shadow-[0_0_28px_rgba(16,185,129,0.1)]">
+      <div className="mb-6 flex w-full flex-wrap items-start justify-between gap-4 rounded-2xl border border-emerald-400/20 bg-gradient-to-r from-emerald-500/20 to-teal-500/10 px-4 py-3 shadow-[0_0_28px_rgba(16,185,129,0.1)]">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-[#E6EEF6]">{callStatusPrimary}</p>
           <p className="mt-1 text-sm font-medium text-[#E6EEF6]">{displayCaller}</p>
@@ -627,11 +705,11 @@ export default function LiveSessionPage() {
         ) : null}
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
           {(role as "agent" | "manager" | "admin") === "manager" && transferData && (
             <div>
               <div
-                className="relative mb-8 max-w-xl rounded-[10px] border px-8 py-10"
+                className="relative mb-8 max-w-xl rounded-[10px] border px-4 py-4"
                 style={{
                   background: "#0F2236",
                   borderColor: "rgba(255,255,255,0.06)",
@@ -707,10 +785,10 @@ export default function LiveSessionPage() {
               </div>
             </div>
           )}
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="min-w-0">
-              <Card className="h-full !p-8 hover:!translate-y-0 hover:!shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+              <div className="rounded-xl border border-white/10 bg-white/5 h-full !p-4 hover:!translate-y-0 hover:!shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
                 <div className="mb-6">
                   <h2 className="text-sm font-semibold tracking-tight text-white">
                     Live transcript
@@ -735,11 +813,13 @@ export default function LiveSessionPage() {
                         className="text-center text-xs leading-relaxed"
                         style={{ color: "#6B859F", lineHeight: 1.7 }}
                       >
-                        {!callActive
-                          ? "No active call — start a session"
-                          : connection === "connected"
-                            ? "Listening for conversation…"
-                            : "Connect to the gateway to see the transcript."}
+                        {callState === "idle" && sessionPhase === "idle"
+                          ? "Start a session or wait for an incoming call."
+                          : callState === "incoming"
+                            ? "Call ringing — transcript will appear when the call is active."
+                            : connection === "connected"
+                              ? "Listening for conversation…"
+                              : "Connect to the gateway to see the transcript."}
                       </p>
                     </div>
                   ) : (
@@ -781,11 +861,11 @@ export default function LiveSessionPage() {
                     </div>
                   )}
                 </div>
-              </Card>
+              </div>
             </div>
 
             <div className="min-h-0 min-w-0">
-              <Card className="h-full !border border-teal-400/40 !bg-gradient-to-br !from-teal-500/10 !to-transparent !p-8 hover:!translate-y-0 hover:!shadow-[0_12px_32px_rgba(0,200,150,0.12)]">
+              <div className="rounded-xl border border-white/10 bg-white/5 h-full !border border-teal-400/40 !bg-gradient-to-br !from-teal-500/10 !to-transparent !p-4 hover:!translate-y-0 hover:!shadow-[0_12px_32px_rgba(0,200,150,0.12)]">
                 <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#1FD6A6]/90">
@@ -825,7 +905,7 @@ export default function LiveSessionPage() {
 
                 <div className="rounded-2xl border border-teal-400/40 bg-gradient-to-br from-teal-500/10 to-transparent p-5 shadow-[inset_0_1px_0_rgba(45,212,191,0.12)]">
                   <div className="flex min-h-[min(18rem,50vh)] flex-col justify-center overflow-y-auto">
-                    {sessionPhase === "ended" || sessionPhase === "idle" ? (
+                    {callState !== "active" ? (
                       <p className="text-center text-sm text-[#6B859F] leading-relaxed">
                         Live guidance will appear here when you&apos;re on a call.
                       </p>
@@ -889,13 +969,13 @@ export default function LiveSessionPage() {
                     </ul>
                   ) : null}
                 </div>
-              </Card>
+              </div>
             </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="min-w-0">
-              <Card className="h-full !rounded-2xl !border !border-white/10 !bg-gradient-to-br !from-[#0F1C2B] !via-white/[0.02] !to-[#0B1623] !p-8 hover:!translate-y-0 hover:!shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+              <div className="rounded-xl border border-white/10 bg-white/5 h-full !rounded-2xl !border !border-white/10 !bg-gradient-to-br !from-[#0F1C2B] !via-white/[0.02] !to-[#0B1623] !p-4 hover:!translate-y-0 hover:!shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-white">Pre-Call Armor Brief</h3>
                 </div>
@@ -932,11 +1012,11 @@ export default function LiveSessionPage() {
                     {preCallArmorView.subtext}
                   </p>
                 ) : null}
-              </Card>
+              </div>
             </div>
 
             <div className="min-w-0">
-              <Card className="h-full !rounded-2xl !border !border-white/10 !bg-gradient-to-br !from-[#0F1C2B] !via-white/[0.02] !to-[#0B1623] !p-8 hover:!translate-y-0 hover:!shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+              <div className="rounded-xl border border-white/10 bg-white/5 h-full !rounded-2xl !border !border-white/10 !bg-gradient-to-br !from-[#0F1C2B] !via-white/[0.02] !to-[#0B1623] !p-4 hover:!translate-y-0 hover:!shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-white">Agent Context</h3>
                 </div>
@@ -948,7 +1028,7 @@ export default function LiveSessionPage() {
                   <p className="mt-1 text-sm text-white/70">Calls today: —</p>
                   <p className="mt-1 text-sm text-white/70">High severity: —</p>
                 </div>
-              </Card>
+              </div>
             </div>
             </div>
           </div>
@@ -1031,11 +1111,11 @@ export default function LiveSessionPage() {
               Policy Upload
             </h3>
 
-            <Card className="mb-3 !py-3 text-[#9FB3C8] hover:!translate-y-0">
+            <div className="rounded-xl border border-white/10 p-4 bg-white/5 mb-3 !py-3 text-[#9FB3C8] hover:!translate-y-0">
               Upload policy documents (PDF, DOCX)
-            </Card>
+            </div>
 
-            <Card className="!py-3 text-[#9FB3C8] hover:!translate-y-0">Active policies list</Card>
+            <div className="rounded-xl border border-white/10 p-4 bg-white/5 !py-3 text-[#9FB3C8] hover:!translate-y-0">Active policies list</div>
           </div>
         </>
       )}

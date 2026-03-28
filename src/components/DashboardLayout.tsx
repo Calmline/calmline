@@ -1,6 +1,5 @@
 "use client";
 
-import { AppShell } from "@/components/layout/AppShell";
 import { AppStatusProvider } from "@/context/AppStatusContext";
 import { RoleProvider } from "@/context/RoleContext";
 
@@ -12,7 +11,7 @@ export function DashboardLayout({
   return (
     <AppStatusProvider>
       <RoleProvider>
-        <AppShell>{children}</AppShell>
+        <div className="min-h-screen">{children}</div>
       </RoleProvider>
     </AppStatusProvider>
   );

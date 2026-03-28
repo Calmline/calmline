@@ -659,7 +659,8 @@ function runServer(): void {
     }
   }, UI_HEARTBEAT_INTERVAL_MS);
 
-  uiWss.on("connection", (ws) => {
+  function handleUIConnection(ws: WebSocket): void {
+    console.log("[ui] CLIENT CONNECTED");
     const socketId = Date.now() + "-" + Math.floor(Math.random() * 1000);
     (ws as WebSocket & { socketId?: string }).socketId = socketId;
     (ws as WebSocket & { isAlive?: boolean }).isAlive = true;
@@ -711,21 +712,21 @@ function runServer(): void {
       console.error("[ui] ERROR", err);
       uiClients.delete(ws);
     });
-  });
+  }
 
   server.on("upgrade", (req, socket, head) => {
+    if (req.url === "/ui") {
+      uiWss.handleUpgrade(req, socket, head, (ws) => {
+        handleUIConnection(ws);
+      });
+      return;
+    }
+
     const pathname = new URL(req.url ?? "", "http://localhost").pathname;
 
     if (pathname.startsWith("/twilio/media")) {
       twilioWss.handleUpgrade(req, socket, head, (ws) => {
         twilioWss.emit("connection", ws, req);
-      });
-      return;
-    }
-
-    if (pathname.startsWith("/ui")) {
-      uiWss.handleUpgrade(req, socket, head, (ws) => {
-        uiWss.emit("connection", ws, req);
       });
       return;
     }
@@ -1498,8 +1499,8 @@ function runServer(): void {
     });
   });
 
-  server.listen(PORT, () => {
-    console.log("[gateway] running on port 8787");
+  server.listen(8787, "0.0.0.0", () => {
+    console.log("[gateway] running on port 8787 (0.0.0.0)");
     console.log(
       "[boot] DEEPGRAM_API_KEY present:",
       Boolean(process.env.DEEPGRAM_API_KEY),

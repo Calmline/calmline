@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
+import { useDashboardView } from "@/context/DashboardViewContext";
 
 const GREETING_LINE = "Good afternoon, Kyra";
 const AVATAR_INITIALS = "KY";
@@ -17,32 +18,38 @@ function formatHeaderDate(): string {
   }
 }
 
-export default function OverviewPage() {
-  const subline = `${formatHeaderDate()} · Your activity will appear here once calls are active`;
-
+function AdminDashboard() {
   return (
-    <div className="mx-auto max-w-7xl px-6">
-      {/* Top header */}
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.06] pb-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[#E6EEF6]">{GREETING_LINE}</h1>
-          <p className="mt-1 text-sm text-[#9FB3C8]">{subline}</p>
-        </div>
-        <div className="relative shrink-0">
-          <div
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-white/[0.12] to-white/[0.04] text-sm font-semibold text-[#E6EEF6] ring-1 ring-white/[0.08]"
-            aria-hidden
-          >
-            {AVATAR_INITIALS}
-          </div>
-          <span
-            className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#0B141F] bg-[#1FD6A6]"
-            title="Available"
-            aria-hidden
-          />
-        </div>
+    <div className="flex flex-col gap-6">
+      <h2 className="text-lg font-semibold text-[#E6EEF6]">Organization Overview</h2>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card className="hover:!translate-y-0">
+          <p className="text-sm text-[#9FB3C8]">Total Agents</p>
+          <p className="mt-1 text-xl font-semibold text-[#E6EEF6]">—</p>
+        </Card>
+        <Card className="hover:!translate-y-0">
+          <p className="text-sm text-[#9FB3C8]">Active Policies</p>
+          <p className="mt-1 text-xl font-semibold text-[#E6EEF6]">—</p>
+        </Card>
+        <Card className="hover:!translate-y-0">
+          <p className="text-sm text-[#9FB3C8]">Compliance Status</p>
+          <p className="mt-1 text-xl font-semibold text-[#E6EEF6]">—</p>
+        </Card>
       </div>
 
+      <Card className="hover:!translate-y-0">
+        <p className="text-sm leading-relaxed text-[#9FB3C8]">
+          Recent activity and organization insights will appear here.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+function AgentDashboard() {
+  return (
+    <>
       {/* Stats grid */}
       <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="!p-6 hover:!translate-y-0">
@@ -122,6 +129,60 @@ export default function OverviewPage() {
           </Card>
         </div>
       </div>
+    </>
+  );
+}
+
+export default function OverviewPage() {
+  const { view, setView } = useDashboardView();
+  const subline = `${formatHeaderDate()} · Your activity will appear here once calls are active`;
+
+  return (
+    <div className="mx-auto max-w-7xl px-6">
+      {/* Top header */}
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.06] pb-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-[#E6EEF6]">{GREETING_LINE}</h1>
+          <p className="mt-1 text-sm text-[#9FB3C8]">{subline}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-1">
+            <button
+              type="button"
+              onClick={() => setView("agent")}
+              className={`rounded-md px-3 py-1 text-sm ${
+                view === "agent" ? "bg-teal-500 text-black" : "text-white/60"
+              }`}
+            >
+              Agent
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("admin")}
+              className={`rounded-md px-3 py-1 text-sm ${
+                view === "admin" ? "bg-teal-500 text-black" : "text-white/60"
+              }`}
+            >
+              Admin
+            </button>
+          </div>
+          <div className="relative shrink-0">
+            <div
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-white/[0.12] to-white/[0.04] text-sm font-semibold text-[#E6EEF6] ring-1 ring-white/[0.08]"
+              aria-hidden
+            >
+              {AVATAR_INITIALS}
+            </div>
+            <span
+              className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#0B141F] bg-[#1FD6A6]"
+              title="Available"
+              aria-hidden
+            />
+          </div>
+        </div>
+      </div>
+
+      {view === "agent" ? <AgentDashboard /> : <AdminDashboard />}
     </div>
   );
 }

@@ -1,71 +1,176 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
-  IconOverview,
-  IconShield,
-  IconLive,
-  IconPolicies,
-  IconAnalytics,
-  IconHistory,
-  IconAgents,
-  IconSettings,
-  IconTraining,
-} from "@/components/Icons";
+  LayoutDashboard,
+  Phone,
+  Shield,
+  CheckCircle,
+  Clock,
+  BookOpen,
+  HeartPulse,
+  Star,
+  FileText,
+  Users,
+  Lock,
+  ClipboardCheck,
+  ScrollText,
+  Database,
+} from "lucide-react";
+import { SidebarNavItem } from "@/components/sidebar/SidebarNavItem";
 
-const items = [
-  { href: "/overview", label: "Overview", Icon: IconOverview },
-  { href: "/pre-call-armor", label: "Pre-Call Armor", Icon: IconShield },
-  { href: "/live-session", label: "Live Session", Icon: IconLive },
-  { href: "/policies", label: "Policies", Icon: IconPolicies },
-  { href: "/risk-analytics", label: "Risk Analytics", Icon: IconAnalytics },
-  { href: "/training-mode", label: "Training Mode", Icon: IconTraining },
-  { href: "/history", label: "History", Icon: IconHistory },
-  { href: "/agents", label: "Agents", Icon: IconAgents },
-  { href: "/settings", label: "Settings", Icon: IconSettings },
-] as const;
+function SectionDivider() {
+  return <div className="my-2 border-t border-white/5" aria-hidden />;
+}
 
-function NavItem({
-  label,
-  href,
-  Icon,
-}: {
-  label: string;
-  href: string;
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-}) {
-  const pathname = usePathname();
-  const isActive = pathname === href;
-
+function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <Link
-      href={href}
-      className={`sidebar-item ${isActive ? "active" : ""}`}
-    >
-      <Icon className={`h-4 w-4 shrink-0 transition-colors ${isActive ? "text-slate-900 opacity-100" : "text-slate-600 opacity-80 hover:opacity-100"}`} />
-      <span>{label}</span>
-    </Link>
+    <div className="mb-1 px-3 text-xs tracking-wide text-gray-500">
+      {children}
+    </div>
   );
 }
 
-export function Sidebar() {
+function LiveSection() {
+  return (
+    <>
+      <SectionTitle>LIVE</SectionTitle>
+      <nav className="flex flex-col space-y-1" aria-label="Live">
+        <SidebarNavItem
+          label="Dashboard"
+          href="/overview"
+          icon={LayoutDashboard}
+        />
+        <SidebarNavItem label="Active Call" href="/live-session" icon={Phone} />
+        <SidebarNavItem
+          label="Pre-Call Armor"
+          href="/pre-call-armor"
+          icon={Shield}
+        />
+        <SidebarNavItem
+          label="Boundary Shield"
+          href="/boundary-shield"
+          icon={CheckCircle}
+        />
+      </nav>
+    </>
+  );
+}
+
+function HistorySection() {
+  return (
+    <>
+      <SectionDivider />
+      <SectionTitle>HISTORY</SectionTitle>
+      <nav className="flex flex-col space-y-1" aria-label="History">
+        <SidebarNavItem label="Call History" href="/history" icon={Clock} />
+        <SidebarNavItem
+          label="Training Mode"
+          href="/training-mode"
+          icon={BookOpen}
+        />
+      </nav>
+    </>
+  );
+}
+
+function WellnessSection() {
+  return (
+    <>
+      <SectionDivider />
+      <SectionTitle>WELLNESS</SectionTitle>
+      <nav className="flex flex-col space-y-1" aria-label="Wellness">
+        <SidebarNavItem
+          label="Emotional Load"
+          href="/workload-signal"
+          icon={HeartPulse}
+        />
+        <SidebarNavItem label="Win Journal" href="/win-journal" icon={Star} />
+      </nav>
+    </>
+  );
+}
+
+function OrganizationSection() {
+  return (
+    <>
+      <SectionDivider />
+      <SectionTitle>ORGANIZATION</SectionTitle>
+      <nav className="flex flex-col space-y-1" aria-label="Organization">
+        <SidebarNavItem
+          label="Overview"
+          href="/organization/overview"
+          icon={LayoutDashboard}
+        />
+        <SidebarNavItem
+          label="Policy Upload"
+          href="/policy-upload"
+          icon={FileText}
+        />
+        <SidebarNavItem
+          label="Agents & Users"
+          href="/organization/agents"
+          icon={Users}
+        />
+        <SidebarNavItem
+          label="Data & Privacy"
+          href="/organization/privacy"
+          icon={Lock}
+        />
+      </nav>
+    </>
+  );
+}
+
+function ComplianceSection() {
+  return (
+    <>
+      <SectionDivider />
+      <SectionTitle>COMPLIANCE</SectionTitle>
+      <nav className="flex flex-col space-y-1" aria-label="Compliance">
+        <SidebarNavItem
+          label="Compliance Status"
+          href="/compliance/overview"
+          icon={ClipboardCheck}
+        />
+        <SidebarNavItem
+          label="Audit Log"
+          href="/compliance/audit-log"
+          icon={ScrollText}
+        />
+        <SidebarNavItem
+          label="Data Protection"
+          href="/compliance/data-protection"
+          icon={Database}
+        />
+      </nav>
+    </>
+  );
+}
+
+export default function Sidebar({ view }: { view: "agent" | "admin" }) {
   return (
     <aside
-      className="fixed left-0 top-0 z-40 h-full w-64 border-r border-slate-200 bg-white"
+      className="fixed left-0 top-0 z-40 h-screen w-[220px] border-r border-white/[0.08] bg-[#0B141F]"
       aria-label="Dashboard navigation"
     >
-      <div className="flex h-full flex-col p-4">
-        <div className="mb-4 px-1">
-          <span className="text-xs font-medium uppercase tracking-wider text-slate-400">
-            NAVIGATION
-          </span>
-        </div>
-        <nav className="flex flex-col gap-1">
-          {items.map(({ href, label, Icon }) => (
-            <NavItem key={href} label={label} href={href} Icon={Icon} />
-          ))}
-        </nav>
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto px-2 py-4">
+        {view === "agent" && (
+          <div className="flex flex-col">
+            <LiveSection />
+            <HistorySection />
+            <WellnessSection />
+          </div>
+        )}
+
+        {view === "admin" && (
+          <div className="flex flex-col">
+            <LiveSection />
+            <HistorySection />
+            <WellnessSection />
+            <OrganizationSection />
+            <ComplianceSection />
+          </div>
+        )}
       </div>
     </aside>
   );
