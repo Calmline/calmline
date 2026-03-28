@@ -45,6 +45,24 @@ Full-stack AI SaaS for live transcript de-escalation analysis. Accepts transcrip
 
    Open [http://localhost:3000](http://localhost:3000).
 
+## Production build & Vercel
+
+- **Build command:** `npm run build` (same as CI). The project must compile with **no ESLint errors**.
+- **Vercel** runs the standard **Next.js** output. It does **not** run the repo’s custom **`server.js`** (that file is for local dev: Twilio Media Stream proxy to the realtime-gateway). On Vercel, deploy the Next app here; run **realtime-gateway** as a separate service if you need live WebSockets/Twilio streaming.
+- **Environment variables (add in Vercel → Project → Settings → Environment Variables):** enable each for **Production** and **Preview** (and optionally Development).
+
+  | Name | Example / notes |
+  |------|-----------------|
+  | `OPENAI_API_KEY` | Your OpenAI secret key |
+  | `NEXT_PUBLIC_SUPABASE_URL` | `https://xxx.supabase.co` |
+  | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role (server-only; never expose to client) |
+  | `CALMLINE_APP_URL` | `https://your-project.vercel.app` (your deployed app URL) |
+  | `NEXT_PUBLIC_GATEWAY_WS` | `wss://your-gateway-host/...` (Live Session UI WebSocket; use `wss://` in production) |
+  | `TWILIO_WS_BASE_URL` | Base URL you use in Twilio config (often `wss://` for Media Streams—match Twilio’s docs) |
+
+  After saving, **redeploy** so new variables apply. **`.env.example`** mirrors the same names for local use.
+- **Verify locally before deploy:** `npm run build`
+
 ## Troubleshooting
 
 - **Repeated `GET /_next/static/...` 404s** — Usually a stale chunk cache. Restart the dev server; if it persists, remove the build cache and restart:

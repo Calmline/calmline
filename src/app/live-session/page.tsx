@@ -307,7 +307,7 @@ export default function LiveSessionPage() {
     return () => {
       console.log("Skipping socket cleanup");
     };
-  }, []);
+  }, [setConnection, setRoleAndPersist]);
 
   useEffect(() => {
     if (sessionPhase !== "active" || sessionStartTime == null) return;
@@ -321,6 +321,7 @@ export default function LiveSessionPage() {
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     return `${m} min ${String(s).padStart(2, "0")} sec`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- callTicker increments each second for live clock
   }, [sessionStartTime, callTicker]);
 
   const callStatusPrimary =
