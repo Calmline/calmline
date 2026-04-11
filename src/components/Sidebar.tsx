@@ -19,12 +19,12 @@ import {
 import { SidebarNavItem } from "@/components/sidebar/SidebarNavItem";
 
 function SectionDivider() {
-  return <div className="my-2 border-t border-white/5" aria-hidden />;
+  return <div className="my-2 border-t border-[#5c2a35]/50" aria-hidden />;
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-1 px-3 text-xs tracking-wide text-gray-500">
+    <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#c9a9ae]">
       {children}
     </div>
   );
@@ -34,13 +34,8 @@ function LiveSection() {
   return (
     <>
       <SectionTitle>LIVE</SectionTitle>
-      <nav className="flex flex-col space-y-1" aria-label="Live">
-        <SidebarNavItem
-          label="Dashboard"
-          href="/overview"
-          icon={LayoutDashboard}
-        />
-        <SidebarNavItem label="Active Call" href="/live-session" icon={Phone} />
+      <nav className="flex flex-col space-y-1.5" aria-label="Live">
+        <SidebarNavItem label="Live Protection" href="/live-session" icon={Phone} />
         <SidebarNavItem
           label="Pre-Call Armor"
           href="/pre-call-armor"
@@ -50,6 +45,16 @@ function LiveSection() {
           label="Boundary Shield"
           href="/boundary-shield"
           icon={CheckCircle}
+        />
+        <SidebarNavItem
+          label="Emotional Continuity"
+          href="/workload-signal"
+          icon={HeartPulse}
+        />
+        <SidebarNavItem
+          label="Privacy Architecture"
+          href="/organization/privacy"
+          icon={Lock}
         />
       </nav>
     </>
@@ -150,10 +155,16 @@ function ComplianceSection() {
 export default function Sidebar({ view }: { view: "agent" | "admin" }) {
   return (
     <aside
-      className="fixed left-0 top-0 z-40 h-screen w-[220px] border-r border-white/[0.08] bg-[#0B141F]"
+      className="fixed left-0 top-0 z-40 h-screen w-[244px] border-r border-[#5c2a35]/60 bg-[#2a1419]"
       aria-label="Dashboard navigation"
     >
-      <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto px-2 py-4">
+      <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto px-3 py-5">
+        <div className="px-2 pb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#c9a9ae]">
+            CalmLine
+          </p>
+          <h2 className="mt-1 text-sm font-semibold text-[#f5e8ea]">Agent Workspace</h2>
+        </div>
         {view === "agent" && (
           <div className="flex flex-col">
             <LiveSection />

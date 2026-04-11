@@ -14,8 +14,8 @@ function AppShellLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Sidebar view={view} />
-      <main className="relative z-10 ml-[220px] min-h-screen bg-[#0B141F] px-6 py-4 font-sans antialiased text-[#E6EEF6]">
-        <div className="mx-auto w-full max-w-[1200px]">
+      <main className="relative z-10 ml-[244px] min-h-screen bg-[#0B141F] px-6 py-6 font-sans antialiased text-[#E6EEF6]">
+        <div className="mx-auto w-full max-w-[1320px]">
           <div className="flex min-h-0 flex-col gap-4">{children}</div>
         </div>
       </main>

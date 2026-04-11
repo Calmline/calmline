@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { useAppStatus } from "@/context/AppStatusContext";
 import { useRole } from "@/context/RoleContext";
@@ -56,36 +58,24 @@ function LiveIndicatorBar({
   risk: string;
 }) {
   return (
-    <div
-      className="mb-6 flex w-full items-center justify-between rounded-full border"
-      style={{
-        borderColor: "rgba(255,255,255,0.08)",
-        background: "rgba(255,255,255,0.04)",
-        padding: "6px 12px",
-        boxShadow: "none",
-      }}
-    >
-      <div className="flex items-center gap-4">
+    <div className="flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
           <span
             className={`h-2 w-2 rounded-full ${
-              status === "Connected" || status === "Listening" ? "animate-pulse bg-[#22C7C9]" : "bg-slate-300"
+              status === "Connected" || status === "Listening" ? "animate-pulse bg-teal-500" : "bg-slate-300"
             }`}
           />
-          <span className="text-xs font-medium" style={{ color: "#9FB3C8" }}>
-            {status}
-          </span>
+          <span className="text-xs font-medium text-slate-700">{status}</span>
         </div>
-        <div className="text-xs" style={{ color: "#6B859F" }}>
-          Tone: <span className="font-medium" style={{ color: "#9FB3C8" }}>{tone}</span>
+        <div className="text-xs text-slate-500">
+          Tone: <span className="font-medium text-slate-800">{tone}</span>
         </div>
-        <div className="text-xs" style={{ color: "#6B859F" }}>
-          Escalation Risk: <span className="font-medium" style={{ color: "#9FB3C8" }}>{risk}</span>
+        <div className="text-xs text-slate-500">
+          Escalation risk: <span className="font-medium text-slate-800">{risk}</span>
         </div>
       </div>
-      <div className="text-xs" style={{ color: "#6B859F" }}>
-        CalmLine AI monitoring conversation
-      </div>
+      <div className="text-xs text-slate-500">CalmLine AI monitoring conversation</div>
     </div>
   );
 }
@@ -115,6 +105,7 @@ function stripTranscriptSpeakerPrefix(line: string): string {
 }
 
 export default function LiveSessionPage() {
+  const pathname = usePathname();
   const { role, setRoleAndPersist } = useRole();
   const [preCallData, setPreCallData] = useState(null as any);
   const [callActive, setCallActive] = useState(false);
@@ -537,39 +528,91 @@ export default function LiveSessionPage() {
   }, [coachText]);
 
   return (
-    <div className="space-y-4 min-h-[calc(100vh-2rem)] bg-transparent">
-      <div className="mb-4 flex items-center justify-between gap-4 px-0">
-        <h1 className="text-xl font-semibold tracking-tight text-[#E6EEF6]">Live Session</h1>
-        {callState === "incoming" && (
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
-            style={{ background: "rgba(245,158,11,0.15)", color: "#B45309" }}
+    <div className="min-h-[calc(100vh-2rem)] space-y-5 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-6 text-slate-800 shadow-sm sm:px-6">
+      <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Live Session</h1>
+            {callState === "incoming" && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Incoming
+              </span>
+            )}
+            {callState === "active" && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-900">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-500" />
+                Connected
+              </span>
+            )}
+          </div>
+          <p className="max-w-xl text-sm text-slate-500">
+            Real-time compliance and coaching view for the active queue. Metrics below are placeholders until
+            reporting is connected.
+          </p>
+        </div>
+        <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Calls</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">—</p>
+            <p className="text-[10px] text-slate-400">Not connected</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">CSAT</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">—</p>
+            <p className="text-[10px] text-slate-400">Not connected</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Escalations</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">—</p>
+            <p className="text-[10px] text-slate-400">Not connected</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Calm score</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">
+              {callState === "active" ? riskLevel || risk || "—" : "—"}
+            </p>
+            <p className="text-[10px] text-slate-400">From live signal</p>
+          </div>
+        </div>
+      </header>
+
+      <nav
+        className="-mx-1 flex flex-wrap gap-1 overflow-x-auto pb-1"
+        aria-label="Compliance sections"
+      >
+        {(
+          [
+            { label: "Active Call", href: "/live-session", active: pathname === "/live-session" },
+            { label: "Pre-Call Armor", href: "/pre-call-armor", active: pathname.startsWith("/pre-call-armor") },
+            { label: "Boundary Shield", href: "/boundary-shield", active: pathname.startsWith("/boundary-shield") },
+            { label: "Call History", href: "/history", active: pathname.startsWith("/history") },
+            { label: "Queue", href: "/overview", active: pathname === "/overview" },
+            { label: "Emotional Load", href: "/workload-signal", active: pathname.startsWith("/workload-signal") },
+            { label: "Debrief", href: "/training-mode", active: pathname.startsWith("/training-mode") },
+            { label: "Performance", href: "/analytics", active: pathname.startsWith("/analytics") },
+            { label: "Team", href: "/organization/agents", active: pathname.startsWith("/organization/agents") },
+            { label: "Audit Log", href: "/compliance/audit-log", active: pathname.startsWith("/compliance/audit-log") },
+          ] as const
+        ).map((tab) => (
+          <Link
+            key={tab.href + tab.label}
+            href={tab.href}
+            className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              tab.active
+                ? "bg-slate-900 text-white shadow-sm"
+                : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100 hover:text-slate-900"
+            }`}
           >
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: "#F59E0B" }}
-            />
-            Incoming
-          </span>
-        )}
-        {callState === "active" && (
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
-            style={{ background: "rgba(34,199,201,0.15)", color: "#0F766E" }}
-          >
-            <span
-              className="h-1.5 w-1.5 rounded-full animate-pulse"
-              style={{ background: "#22C7C9" }}
-            />
-            Connected
-          </span>
-        )}
-      </div>
+            {tab.label}
+          </Link>
+        ))}
+      </nav>
 
       {callState === "incoming" && (
-        <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3">
-          <h3 className="text-lg font-semibold text-[#E6EEF6]">Incoming Call</h3>
-          <p className="mt-1 text-sm text-[#9FB3C8]">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <h3 className="text-base font-semibold text-amber-950">Incoming call</h3>
+          <p className="mt-1 text-sm text-amber-900/80">
             {String(
               (typeof incomingCall?.from === "string" && incomingCall.from) ||
                 (typeof incomingCall?.phone === "string" && incomingCall.phone) ||
@@ -580,143 +623,109 @@ export default function LiveSessionPage() {
       )}
 
       {callState === "active" && (
-        <div className="mb-4 rounded-xl border border-teal-400/40 bg-teal-500/10 px-4 py-3">
-          <h3 className="text-lg font-semibold text-[#E6EEF6]">Call in Progress</h3>
+        <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3">
+          <h3 className="text-base font-semibold text-teal-950">Call in progress</h3>
         </div>
       )}
 
       {callState === "idle" && sessionPhase === "idle" && (
-        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-gray-400">
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
           No active call
         </div>
       )}
 
       {role === "agent" && (
         <>
-      <div className="live-session-dark">
-      <div
-        className="flex items-center justify-between"
-        style={{
-          borderBottom: "1px solid rgba(148, 163, 184, 0.28)",
-          paddingBottom: 12,
-          marginBottom: 12,
-        }}
-      >
-        <div className="flex" style={{ gap: 12 }}>
-          <button
-            onClick={startSession}
-            className="rounded-[10px] px-5 py-2 text-sm font-medium text-[#0B141F] shadow-sm transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-[#1FD6A6]/50 focus:ring-offset-2 focus:ring-offset-[#0B1726]"
-            style={{
-              background: "#1FD6A6",
-              transition: "all 0.15s ease",
-            }}
-          >
-            Start Live Session
-          </button>
-          <button
-            onClick={endSession}
-            className="rounded-[10px] px-5 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-[#0B1726]"
-            style={{
-              background: "transparent",
-              color: "#E6EEF3",
-              border: "1px solid rgba(255,255,255,0.1)",
-              transition: "all 0.15s ease",
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.background = "rgba(255,255,255,0.05)";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.background = "transparent";
-            }}
-          >
-            End Session
-          </button>
-          <div style={{ position: "relative", zIndex: 10 }}>
-            {(role as "agent" | "manager" | "admin") === "manager" && (
-              <button
-                onClick={async () => {
-                  console.log("🚀 Simulate Transfer CLICKED");
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className="min-w-0 lg:col-span-3">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="divide-y divide-slate-200">
+              <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-4">
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={startSession}
+                    className="rounded-lg bg-teal-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                  >
+                    Start Live Session
+                  </button>
+                  <button
+                    type="button"
+                    onClick={endSession}
+                    className="rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200 focus:ring-offset-2"
+                  >
+                    End Session
+                  </button>
+                  <div className="relative z-10">
+                    {(role as "agent" | "manager" | "admin") === "manager" && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          console.log("🚀 Simulate Transfer CLICKED");
 
-                  const payload = {
-                    phone: "+16195551234",
-                    agent: "Ky (Support Agent)",
-                    summary: "Customer upset about billing issue, requested refund, escalation triggered",
-                    escalation_level: "HIGH",
-                  };
+                          const payload = {
+                            phone: "+16195551234",
+                            agent: "Ky (Support Agent)",
+                            summary: "Customer upset about billing issue, requested refund, escalation triggered",
+                            escalation_level: "HIGH",
+                          };
 
-                  console.log("📦 Sending transfer payload:", payload);
+                          console.log("📦 Sending transfer payload:", payload);
 
-                  try {
-                    const res = await fetch("/api/transfer", {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify(payload),
-                    });
+                          try {
+                            const res = await fetch("/api/transfer", {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                              },
+                              body: JSON.stringify(payload),
+                            });
 
-                    console.log("✅ Transfer response status:", res.status);
-                    if (res.ok) {
-                      setTransferData(payload);
-                      setRoleAndPersist("manager");
-                    }
-                  } catch (err) {
-                    console.error("❌ Transfer failed:", err);
-                  }
-                }}
-                className="rounded-[10px] px-5 py-2 text-sm font-medium"
-                style={{
-                  backgroundColor: "transparent",
-                  color: "#E6EEF3",
-                  cursor: "pointer",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)";
-                  e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)";
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-                  e.currentTarget.style.backgroundColor = "transparent";
-                }}
-              >
-                Simulate Transfer
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="text-sm" style={{ color: "#9FB3C8" }}>{sessionStatusDisplay}</div>
-      </div>
-      <LiveIndicatorBar
-        status={statusDisplay}
-        tone={isActiveCall ? (conversationState || callTone) : "-"}
-        risk={isActiveCall ? (riskLevel || risk) : "-"}
-      />
+                            console.log("✅ Transfer response status:", res.status);
+                            if (res.ok) {
+                              setTransferData(payload);
+                              setRoleAndPersist("manager");
+                            }
+                          } catch (err) {
+                            console.error("❌ Transfer failed:", err);
+                          }
+                        }}
+                        className="rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
+                      >
+                        Simulate Transfer
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="text-sm text-slate-600">{sessionStatusDisplay}</div>
+              </div>
 
-      <div className="mb-6 flex w-full flex-wrap items-start justify-between gap-4 rounded-2xl border border-emerald-400/20 bg-gradient-to-r from-emerald-500/20 to-teal-500/10 px-4 py-3 shadow-[0_0_28px_rgba(16,185,129,0.1)]">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-[#E6EEF6]">{callStatusPrimary}</p>
-          <p className="mt-1 text-sm font-medium text-[#E6EEF6]">{displayCaller}</p>
-        </div>
-        {showHighRiskBadge ? (
-          <span className="shrink-0 rounded-full bg-red-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-red-300">
-            HIGH RISK
-          </span>
-        ) : null}
-      </div>
+              <div className="px-4 py-4">
+                <LiveIndicatorBar
+                  status={statusDisplay}
+                  tone={isActiveCall ? (conversationState || callTone) : "-"}
+                  risk={isActiveCall ? (riskLevel || risk) : "-"}
+                />
+              </div>
 
-      <div className="space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-4 bg-slate-50/90 px-4 py-4">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Active session</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">{callStatusPrimary}</p>
+                  <p className="mt-1 text-sm text-slate-700">{displayCaller}</p>
+                </div>
+                {showHighRiskBadge ? (
+                  <span className="shrink-0 rounded-full bg-red-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-red-800">
+                    HIGH RISK
+                  </span>
+                ) : null}
+              </div>
+
           {(role as "agent" | "manager" | "admin") === "manager" && transferData && (
-            <div>
+            <div className="px-4 py-4">
               <div
-                className="relative mb-8 max-w-xl rounded-[10px] border px-4 py-4"
-                style={{
-                  background: "#0F2236",
-                  borderColor: "rgba(255,255,255,0.06)",
-                  boxShadow: "0 10px 24px rgba(2, 6, 23, 0.35)",
-                  animation: "transferFadeIn 220ms ease-out",
-                }}
+                className="relative max-w-xl rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 shadow-sm"
+                style={{ animation: "transferFadeIn 220ms ease-out" }}
               >
                 <button
                   type="button"
@@ -724,96 +733,48 @@ export default function LiveSessionPage() {
                     setTransferData(null);
                     setRoleAndPersist("agent");
                   }}
-                  className="absolute text-xs font-medium"
-                  style={{
-                    top: "1.25rem",
-                    right: "1.25rem",
-                    color: "#6B859F",
-                    background: "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: 0,
-                    opacity: 0.6,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.opacity = "1";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.opacity = "0.6";
-                  }}
+                  className="absolute right-4 top-4 text-xs font-medium text-slate-500 opacity-70 transition hover:opacity-100"
                 >
                   Clear
                 </button>
-                <div
-                  className="space-y-4 pr-14 text-[15px] leading-normal"
-                  style={{ color: "#9FB3C8" }}
-                >
-                  <div
-                    className="text-[11px] font-medium uppercase tracking-[0.12em]"
-                    style={{ color: "#6B859F" }}
-                  >
-                    Transfer Incoming
+                <div className="space-y-3 pr-12 text-sm text-slate-700">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Transfer incoming
                   </div>
-                  <div className="font-medium">{transferData.phone}</div>
+                  <div className="font-semibold text-slate-900">{transferData.phone}</div>
                   {transferData.escalation_level === "HIGH" ? (
-                    <div className="font-bold" style={{ color: "#F59E0B" }}>
-                      High Risk
-                    </div>
+                    <div className="font-semibold text-amber-800">High risk</div>
                   ) : null}
-                  <div
-                    className="border-t"
-                    style={{ borderColor: "rgba(148, 163, 184, 0.28)" }}
-                    aria-hidden
-                  />
-                  <div
-                    className="my-5 border-t"
-                    style={{ borderColor: "rgba(148, 163, 184, 0.35)" }}
-                    aria-hidden
-                  />
-                  <div className="truncate" title={transferData.agent}>
-                    <span className="text-xs" style={{ color: "#6B859F" }}>Handled by: </span>
-                    <span className="font-semibold">{transferData.agent}</span>
+                  <div className="border-t border-slate-200 pt-3" aria-hidden />
+                  <div className="truncate text-sm" title={transferData.agent}>
+                    <span className="text-slate-500">Handled by: </span>
+                    <span className="font-medium text-slate-900">{transferData.agent}</span>
                   </div>
-                  <div className="truncate" title={transferData.summary}>
-                    <span className="text-xs" style={{ color: "#6B859F" }}>Prior Issue: </span>
-                    <span className="font-semibold">{transferData.summary}</span>
+                  <div className="truncate text-sm" title={transferData.summary}>
+                    <span className="text-slate-500">Prior issue: </span>
+                    <span className="font-medium text-slate-900">{transferData.summary}</span>
                   </div>
-                  <div className="truncate" title={transferData.escalation_level}>
-                    <span className="text-xs" style={{ color: "#6B859F" }}>Customer reaction: </span>
-                    <span className="font-semibold">{transferData.escalation_level}</span>
+                  <div className="truncate text-sm" title={transferData.escalation_level}>
+                    <span className="text-slate-500">Escalation: </span>
+                    <span className="font-medium text-slate-900">{transferData.escalation_level}</span>
                   </div>
                 </div>
               </div>
             </div>
           )}
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="min-w-0">
-              <div className="rounded-xl border border-white/10 bg-white/5 h-full !p-4 hover:!translate-y-0 hover:!shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
-                <div className="mb-6">
-                  <h2 className="text-sm font-semibold tracking-tight text-white">
-                    Live transcript
-                  </h2>
-                  <p className="mt-1 text-sm text-white/60">Customer speaking in real time</p>
+
+              <div className="px-4 py-4">
+                <div className="mb-3 border-b border-slate-100 pb-3">
+                  <h2 className="text-sm font-semibold text-slate-900">Live transcript</h2>
+                  <p className="mt-0.5 text-xs text-slate-500">Streamed in real time from the gateway</p>
                 </div>
                 <div
                   ref={transcriptRef}
-                  className="transcript-panel h-[min(28rem,55vh)] overflow-y-auto scroll-smooth rounded-2xl border p-4 text-sm"
-                  style={{
-                    borderColor: "rgba(255,255,255,0.06)",
-                    background: "#060D18",
-                    boxShadow: "none",
-                  }}
+                  className="transcript-panel h-[min(20rem,42vh)] overflow-y-auto scroll-smooth rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm"
                 >
                   {transcriptLines.length === 0 ? (
-                    <div
-                      className="flex min-h-[20rem] flex-col items-center justify-center rounded-2xl px-5 py-10"
-                      style={{ background: "rgba(0, 0, 0, 0.2)" }}
-                    >
-                      <p
-                        className="text-center text-xs leading-relaxed"
-                        style={{ color: "#6B859F", lineHeight: 1.7 }}
-                      >
+                    <div className="flex min-h-[14rem] flex-col items-center justify-center rounded-lg px-4 py-8">
+                      <p className="text-center text-xs leading-relaxed text-slate-500">
                         {callState === "idle" && sessionPhase === "idle"
                           ? "Start a session or wait for an incoming call."
                           : callState === "incoming"
@@ -824,238 +785,198 @@ export default function LiveSessionPage() {
                       </p>
                     </div>
                   ) : (
-                    <div className="transcript-box space-y-3">
+                    <ul className="transcript-box divide-y divide-slate-200">
                       {transcriptLines.map((line, i) => {
-                        const role = transcriptSpeakerRole(line, i);
+                        const lineRole = transcriptSpeakerRole(line, i);
                         const body = stripTranscriptSpeakerPrefix(line);
                         const isNew = i === transcriptLines.length - 1;
                         return (
-                          <div
+                          <li
                             key={`${i}-${line.slice(0, 32)}`}
-                            className={`flex w-full ${role === "agent" ? "justify-end" : "justify-start"}`}
+                            className={`flex gap-3 py-3 first:pt-0 last:pb-0 ${isNew ? "transcript-line-new" : ""}`}
                           >
-                            <div
-                              className={`max-w-[92%] rounded-2xl px-3 py-2.5 ${
-                                role === "agent"
-                                  ? "rounded-br-md border border-[#1FD6A6]/25 bg-[#0F2236]/90"
-                                  : "rounded-bl-md border border-red-500/15 bg-white/[0.04]"
-                              } ${isNew ? "transcript-line-new" : ""}`}
+                            <span
+                              className={`w-16 shrink-0 pt-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                lineRole === "agent" ? "text-teal-700" : "text-slate-500"
+                              }`}
                             >
-                              <div className="mb-1 flex items-center gap-2">
-                                <span
-                                  className={`text-[10px] font-semibold uppercase tracking-wide ${
-                                    role === "agent"
-                                      ? "text-[#1FD6A6]"
-                                      : "text-red-400/90"
-                                  }`}
-                                >
-                                  {role === "agent" ? "You" : "Customer"}
-                                </span>
-                              </div>
-                              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#C8D4E0]">
-                                {body}
-                              </p>
-                            </div>
-                          </div>
+                              {lineRole === "agent" ? "You" : "Caller"}
+                            </span>
+                            <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
+                              {body}
+                            </p>
+                          </li>
                         );
                       })}
-                    </div>
+                    </ul>
                   )}
                 </div>
               </div>
-            </div>
 
-            <div className="min-h-0 min-w-0">
-              <div className="rounded-xl border border-white/10 bg-white/5 h-full !border border-teal-400/40 !bg-gradient-to-br !from-teal-500/10 !to-transparent !p-4 hover:!translate-y-0 hover:!shadow-[0_12px_32px_rgba(0,200,150,0.12)]">
-                <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+              <div className="border-t border-slate-200 bg-slate-50/80 px-4 py-5">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#1FD6A6]/90">
-                      AI COACHING — LIVE
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-800">
+                      AI coaching — live
                     </p>
-                    <h3 className="mt-1 font-semibold tracking-tight text-[#E6EEF3] text-lg">
-                      What to Say Now
-                    </h3>
+                    <h3 className="mt-1 text-lg font-semibold text-slate-900">What to Say Now</h3>
                   </div>
-                  <div className="inline-flex items-center gap-1.5 text-xs text-[#9FB3C8]">
-                    <span
-                      className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#1FD6A6]"
-                      aria-hidden
-                    />
+                  <div className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-500" aria-hidden />
                     Live
                   </div>
                 </div>
 
-                <div className="mb-4 min-h-[1.25rem] space-y-1">
+                <div className="mb-3 min-h-[1.25rem] space-y-1">
                   {showGeneratingStatus ? (
-                    <p className="text-xs font-medium text-teal-300/90">
+                    <p className="text-xs font-medium text-amber-800">
                       <span className="inline-flex items-center gap-2">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
                         Generating response...
                       </span>
                     </p>
                   ) : null}
                   {showListeningStatus ? (
-                    <p className="text-xs font-medium text-[#9FB3C8]">
+                    <p className="text-xs font-medium text-slate-600">
                       <span className="inline-flex items-center gap-2">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#22C7C9]" />
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-teal-500" />
                         Listening...
                       </span>
                     </p>
                   ) : null}
                 </div>
 
-                <div className="rounded-2xl border border-teal-400/40 bg-gradient-to-br from-teal-500/10 to-transparent p-5 shadow-[inset_0_1px_0_rgba(45,212,191,0.12)]">
-                  <div className="flex min-h-[min(18rem,50vh)] flex-col justify-center overflow-y-auto">
+                <div className="rounded-xl border border-teal-200/80 bg-white p-6 shadow-sm ring-1 ring-teal-900/5">
+                  <div className="flex min-h-[min(16rem,38vh)] flex-col justify-center overflow-y-auto">
                     {callState !== "active" ? (
-                      <p className="text-center text-sm text-[#6B859F] leading-relaxed">
+                      <p className="text-center text-sm leading-relaxed text-slate-500">
                         Live guidance will appear here when you&apos;re on a call.
                       </p>
                     ) : coachText ? (
-                      <p className="text-center text-xl font-medium leading-relaxed text-[#E6EEF3]">
+                      <p className="text-center text-2xl font-semibold leading-relaxed text-slate-900">
                         &ldquo;{coachText}&rdquo;
                       </p>
                     ) : aiThinking ? (
-                      <p className="text-center text-sm leading-relaxed text-[#9FB3C8]">
+                      <p className="text-center text-sm leading-relaxed text-slate-600">
                         AI analyzing conversation
                         <span className="ml-1 animate-pulse">...</span>
                       </p>
                     ) : (
-                      <p className="text-center text-sm leading-relaxed text-[#9FB3C8]">
+                      <p className="text-center text-sm leading-relaxed text-slate-600">
                         Waiting for the next coaching cue from your live transcript...
                       </p>
                     )}
                   </div>
                 </div>
 
-                <div className="mt-6 flex flex-wrap gap-3">
+                <div className="mt-4 flex flex-wrap gap-3">
                   <button
                     type="button"
                     onClick={() => void copyScript()}
                     disabled={!coachText.trim()}
-                    className="rounded-[10px] bg-[#1FD6A6] px-5 py-2.5 text-sm font-medium text-[#0B141F] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {copyFeedback ? "Copied" : "Copy Script"}
                   </button>
                   <button
                     type="button"
-                    className="rounded-[10px] border border-white/[0.12] bg-transparent px-5 py-2.5 text-sm font-medium text-[#E6EEF6] transition hover:bg-white/[0.06]"
+                    className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
                   >
                     Regenerate
                   </button>
                 </div>
 
-                <div className="mt-6 border-t border-white/[0.08] pt-5">
+                <div className="mt-4 border-t border-slate-200 pt-4">
                   <button
                     type="button"
                     onClick={() => setBackupOpen((o) => !o)}
-                    className="flex w-full items-center justify-between gap-2 text-left text-sm font-semibold text-[#9FB3C8] transition hover:text-[#E6EEF6]"
+                    className="flex w-full items-center justify-between gap-2 text-left text-sm font-semibold text-slate-600 transition hover:text-slate-900"
                   >
-                    <span>Backup responses</span>
+                    <span>Supporting response suggestions</span>
                     <ChevronDown
-                      className={`h-4 w-4 shrink-0 transition-transform ${backupOpen ? "rotate-180" : ""}`}
+                      className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${backupOpen ? "rotate-180" : ""}`}
                       aria-hidden
                     />
                   </button>
                   {backupOpen ? (
-                    <ul className="mt-3 space-y-3 text-sm leading-relaxed text-[#9FB3C8]">
-                      <li className="rounded-lg border border-white/[0.06] bg-[#060D18]/80 p-3">
-                        I understand you&apos;d like to speak to a manager. At the moment, one
-                        isn&apos;t available, but I can take full ownership of resolving this for
-                        you.
-                      </li>
-                      <li className="rounded-lg border border-white/[0.06] bg-[#060D18]/80 p-3">
-                        I want to make sure this gets handled properly. Let me continue assisting you
-                        so we can resolve this without delay.
-                      </li>
-                    </ul>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-500">
+                      No alternate responses are configured yet. Templates will appear here when available.
+                    </p>
                   ) : null}
                 </div>
               </div>
-            </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="min-w-0">
-              <div className="rounded-xl border border-white/10 bg-white/5 h-full !rounded-2xl !border !border-white/10 !bg-gradient-to-br !from-[#0F1C2B] !via-white/[0.02] !to-[#0B1623] !p-4 hover:!translate-y-0 hover:!shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-white">Pre-Call Armor Brief</h3>
-                </div>
-                <dl className="space-y-3 text-xs text-[#9FB3C8]">
-                  <div className="flex justify-between gap-2 border-b border-white/[0.05] pb-2.5">
-                    <dt className="text-[#6B859F]">Caller number</dt>
-                    <dd className="text-right font-medium text-[#E6EEF6]">{displayCaller}</dd>
-                  </div>
-                  <div className="flex justify-between gap-2 border-b border-white/[0.05] pb-2.5">
-                    <dt className="text-[#6B859F]">Contacts (last 30 days)</dt>
-                    <dd className="text-right font-medium text-[#E6EEF6]">
-                      {preCallData != null ? String((preCallData as any).contacts30d) : "—"}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-2 border-b border-white/[0.05] pb-2.5">
-                    <dt className="text-[#6B859F]">Last issue</dt>
-                    <dd className="max-w-[60%] text-right font-medium text-[#E6EEF6]">
-                      {preCallData != null ? String((preCallData as any).lastIssue) : "—"}
-                    </dd>
-                  </div>
-                  {(preCallData as any)?.note ? (
-                    <div className="flex flex-col gap-1 pt-0.5">
-                      <dt className="text-[#6B859F]">Notes</dt>
-                      <dd>
-                        <p className="text-[11px] leading-relaxed text-[#9FB3C8]">
-                          {(preCallData as any).note}
-                        </p>
-                      </dd>
-                    </div>
-                  ) : null}
-                </dl>
-                {preCallArmorView?.subtext ? (
-                  <p className="mt-4 border-t border-white/[0.06] pt-4 text-xs leading-relaxed text-[#9FB3C8]">
-                    {preCallArmorView.subtext}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="min-w-0">
-              <div className="rounded-xl border border-white/10 bg-white/5 h-full !rounded-2xl !border !border-white/10 !bg-gradient-to-br !from-[#0F1C2B] !via-white/[0.02] !to-[#0B1623] !p-4 hover:!translate-y-0 hover:!shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-white">Agent Context</h3>
-                </div>
-                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-                  <p className="text-sm leading-relaxed text-white/60">
-                    Call metrics will appear during active sessions.
-                  </p>
-                  <p className="mt-3 text-sm text-white/70">Current state: —</p>
-                  <p className="mt-1 text-sm text-white/70">Calls today: —</p>
-                  <p className="mt-1 text-sm text-white/70">High severity: —</p>
-                </div>
-              </div>
-            </div>
             </div>
           </div>
-      </div>
+        </div>
+
+        <aside className="min-w-0 lg:col-span-2">
+          <div className="flex h-full min-h-[min(28rem,70vh)] flex-col gap-0 overflow-hidden rounded-2xl border border-slate-300/90 bg-slate-200/50 shadow-inner ring-1 ring-teal-900/10">
+            <div className="border-b border-slate-300/80 px-5 py-4">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Summary / insight</h2>
+              <p className="mt-2 text-sm leading-relaxed text-slate-800">
+                {preCallArmorView?.subtext
+                  ? preCallArmorView.subtext
+                  : "No compliance summary is available for this moment yet. Insight will populate when pre-call or live context arrives."}
+              </p>
+            </div>
+            <div className="border-b border-slate-300/80 px-5 py-4">
+              <h3 className="text-sm font-semibold text-slate-900">Pre-Call Armor brief</h3>
+              <dl className="mt-3 space-y-0 divide-y divide-slate-300/60 text-sm">
+                <div className="flex justify-between gap-2 py-2.5">
+                  <dt className="text-slate-500">Caller number</dt>
+                  <dd className="text-right font-medium text-slate-900">{displayCaller}</dd>
+                </div>
+                <div className="flex justify-between gap-2 py-2.5">
+                  <dt className="text-slate-500">Contacts (last 30 days)</dt>
+                  <dd className="text-right font-medium text-slate-900">
+                    {preCallData != null ? String((preCallData as any).contacts30d) : "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2 py-2.5">
+                  <dt className="text-slate-500">Last issue</dt>
+                  <dd className="max-w-[55%] text-right font-medium text-slate-900">
+                    {preCallData != null ? String((preCallData as any).lastIssue) : "—"}
+                  </dd>
+                </div>
+                {(preCallData as any)?.note ? (
+                  <div className="py-2.5">
+                    <dt className="text-slate-500">Notes</dt>
+                    <dd className="mt-1 text-xs leading-relaxed text-slate-600">{(preCallData as any).note}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </div>
+            <div className="flex-1 px-5 py-4">
+              <h3 className="text-sm font-semibold text-slate-900">Agent context</h3>
+              <div className="mt-3 rounded-xl border border-slate-300/80 bg-slate-100/80 px-4 py-3">
+                <p className="text-sm leading-relaxed text-slate-600">
+                  Call metrics will appear during active sessions.
+                </p>
+                <p className="mt-3 text-sm text-slate-700">Current state: —</p>
+                <p className="mt-1 text-sm text-slate-700">Calls today: —</p>
+                <p className="mt-1 text-sm text-slate-700">High severity: —</p>
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
         </>
       )}
       {role === "manager" && (
         <>
-          <div className="live-session-dark">
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-sm">
             {transferData ? (
               <>
-                <div className="transfer-banner">
-                  <div>Transfer incoming — Pre-Call Armor loaded</div>
-                  <div className="transfer-tag">HIGH RISK</div>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="text-sm font-medium text-slate-900">Transfer incoming — Pre-Call Armor loaded</div>
+                  <div className="rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-red-800">
+                    HIGH RISK
+                  </div>
                 </div>
 
                 <div className="manager-grid">
-                  <div
-                    className="rounded-[10px] border p-4"
-                    style={{
-                      background: "#0F2236",
-                      borderColor: "rgba(255,255,255,0.06)",
-                    }}
-                  >
-                    <h3 className="mb-3 text-base font-semibold" style={{ color: "#E6EEF3" }}>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <h3 className="mb-3 text-base font-semibold text-slate-900">
                       Transfer Brief
                     </h3>
                     <div className="row">
@@ -1079,20 +1000,14 @@ export default function LiveSessionPage() {
                     </div>
                   </div>
 
-                  <div
-                    className="rounded-[10px] border p-4"
-                    style={{
-                      background: "#0F2236",
-                      borderColor: "rgba(255,255,255,0.06)",
-                    }}
-                  >
-                    <h3 className="mb-3 text-base font-semibold" style={{ color: "#E6EEF3" }}>
+                  <div className="rounded-xl border border-teal-200/80 bg-white p-4 shadow-sm ring-1 ring-teal-900/5">
+                    <h3 className="mb-3 text-base font-semibold text-slate-900">
                       Open with this
                     </h3>
                     <div className="response-box">
                       {coachText ? `“${coachText}”` : "AI is listening to the conversation..."}
                     </div>
-                    <p className="mt-3 text-xs" style={{ color: "#6B859F" }}>
+                    <p className="mt-3 text-xs text-slate-500">
                       The customer does not need to repeat themselves. CalmLine already understands the
                       situation.
                     </p>
@@ -1100,54 +1015,29 @@ export default function LiveSessionPage() {
                 </div>
               </>
             ) : (
-              <div className="empty-state">Waiting for transfer...</div>
+              <div className="py-10 text-center text-sm text-slate-500">Waiting for transfer...</div>
             )}
           </div>
         </>
       )}
       {role === "admin" && (
         <>
-          <div className="live-session-dark">
-            <h3 className="mb-4 text-base font-semibold" style={{ color: "#E6EEF3" }}>
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-sm">
+            <h3 className="mb-4 text-base font-semibold text-slate-900">
               Policy Upload
             </h3>
 
-            <div className="rounded-xl border border-white/10 p-4 bg-white/5 mb-3 !py-3 text-[#9FB3C8] hover:!translate-y-0">
+            <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               Upload policy documents (PDF, DOCX)
             </div>
 
-            <div className="rounded-xl border border-white/10 p-4 bg-white/5 !py-3 text-[#9FB3C8] hover:!translate-y-0">Active policies list</div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Active policies list
+            </div>
           </div>
         </>
       )}
       <style jsx>{`
-        .live-session-dark {
-          background: linear-gradient(180deg, #0b1f33 0%, #091a2a 100%);
-          border-radius: 24px;
-          padding: 24px;
-          margin-top: 16px;
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-        }
-
-        .transfer-banner {
-          background: linear-gradient(90deg, #1E3A5F, #1B2F4A);
-          border-radius: 10px;
-          padding: 14px 16px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          color: #E6EEF3;
-          margin-bottom: 16px;
-        }
-
-        .transfer-tag {
-          background: #C04040;
-          color: white;
-          font-size: 11px;
-          padding: 4px 8px;
-          border-radius: 999px;
-        }
-
         .manager-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -1164,28 +1054,28 @@ export default function LiveSessionPage() {
 
         .divider {
           height: 1px;
-          background: rgba(255, 255, 255, 0.06);
+          background: #e2e8f0;
           margin: 2px 0;
         }
 
         .label {
-          color: #6B859F;
+          color: #64748b;
           font-size: 12px;
         }
 
         .value {
-          color: #E6EEF3;
+          color: #0f172a;
           font-size: 14px;
           text-align: right;
         }
 
         .response-box {
-          background: #162A40;
+          background: #f8fafc;
           border-radius: 8px;
           padding: 16px;
-          color: #E6EEF3;
+          color: #0f172a;
           line-height: 1.6;
-          border-left: 3px solid #1E6B52;
+          border-left: 3px solid #0d9488;
         }
 
         .precall-card {
