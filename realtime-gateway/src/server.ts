@@ -2,6 +2,11 @@ import "dotenv/config";
 import http from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { createClient, LiveTranscriptionEvents } from "@deepgram/sdk";
+import {
+  detectAbusiveLanguage,
+  isServiceProblemContext,
+} from "./abuseDetection";
+import { tryHandleBoundaryShieldTestRequest } from "./boundaryShieldTestMode";
 
 const apiKey =
   process.env.DEEPGRAM_API_KEY ||
@@ -87,105 +92,12 @@ const ABUSIVE_SCRIPTS: Record<AbusiveSeverity, string> = {
     "I am unable to continue this conversation due to the language being used. This call is now ending.",
 };
 
-// Explicit profanity only — mild frustration words (ridiculous, insane, crazy, etc.) are NOT included
-const ABUSIVE_PROFANITY = [
-  "damn", "hell", "crap", "bull", "bs", "piss", "pissed", "screw", "screwed",
-];
-// Direct insults toward the agent only
-const ABUSIVE_INSULTS = [
-  "you're stupid", "you're an idiot", "you idiot", "you stupid", "you're useless",
-  "you're pathetic", "stupid rep", "idiot rep", "you people", "worst service",
-  "you can't do", "you don't care", "you're a jerk", "you jerk", "dumb rep",
-  "incompetent", "you're incompetent", "you're worthless", "shut up", "shut it",
-];
-// Mild frustration phrases that must NOT trigger abuse logic
 const MILD_FRUSTRATION_PHRASES = [
-  "this is ridiculous", "this is insane", "this is crazy", "this makes no sense",
+  "this is ridiculous",
+  "this is insane",
+  "this is crazy",
+  "this makes no sense",
 ];
-// Service-problem context: prioritize problem resolution over behavior correction
-const SERVICE_PROBLEM_SIGNALS = [
-  "billing", "bill", "charged", "charge", "duplicate charge", "double charge",
-  "login", "log in", "logged in", "password", "account", "can't log",
-  "error", "error message", "something went wrong", "not working", "broken",
-  "refund", "dispute", "incorrect charge", "wrong amount", "missing payment",
-];
-const ABUSIVE_SEVERE = [
-  "kill you", "hurt you", "find you", "you're dead", "i'll sue", "lawyer",
-  "sexual", "inappropriate", "threaten", "threat",
-];
-
-function detectAbusiveLanguage(
-  transcript: string,
-  lastScriptSent?: "warning_needed" | "final_warning" | null,
-): { abusiveDetected: boolean; severity: AbusiveSeverity; allowTerminationScript: boolean } {
-  const lower = transcript.toLowerCase().trim();
-  if (!lower) return { abusiveDetected: false, severity: "warning_needed", allowTerminationScript: false };
-
-  // Hard block: service problem (billing, charge, login, account, refund) → force abusiveDetected = false
-  if (isServiceProblemContext(transcript)) {
-    return { abusiveDetected: false, severity: "warning_needed", allowTerminationScript: false };
-  }
-
-  const normalized = lower.replace(/[.!?]+$/, "").trim();
-  if (MILD_FRUSTRATION_PHRASES.some((p) => normalized === p)) {
-    return { abusiveDetected: false, severity: "warning_needed", allowTerminationScript: false };
-  }
-
-  const wordBoundary = (w: string) =>
-    new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "gi");
-  let profanityCount = 0;
-  for (const w of ABUSIVE_PROFANITY) {
-    const m = lower.match(wordBoundary(w));
-    if (m) profanityCount += m.length;
-  }
-  const repeatedProfanity = profanityCount >= 2;
-  const anyProfanity = profanityCount >= 1;
-  const insults = ABUSIVE_INSULTS.some((p) => lower.includes(p));
-  const severe = ABUSIVE_SEVERE.some((p) => lower.includes(p));
-
-  // Mild frustration phrases/words NEVER trigger abuse (e.g. "ridiculous", "insane", "crazy", "this makes no sense")
-  const hasMildFrustrationPhrase =
-    MILD_FRUSTRATION_PHRASES.some((p) => lower.includes(p)) ||
-    ["ridiculous", "insane", "crazy"].some((w) => lower.includes(w));
-  if (hasMildFrustrationPhrase && !insults && !severe) {
-    return { abusiveDetected: false, severity: "warning_needed", allowTerminationScript: false };
-  }
-
-  const hasProfanityOrAbusive = anyProfanity || insults || severe;
-  const repeatedAggression = repeatedProfanity || lastScriptSent != null;
-
-  if (severe) {
-    // Escalation HIGH (severe implies HIGH). Allow script only with repeated aggression.
-    const escalationHigh = true;
-    const allowTerminationScript = escalationHigh && hasProfanityOrAbusive && repeatedAggression;
-    return { abusiveDetected: true, severity: "severe", allowTerminationScript };
-  }
-  if (!repeatedProfanity && !anyProfanity && !insults) {
-    return { abusiveDetected: false, severity: "warning_needed", allowTerminationScript: false };
-  }
-
-  // severity=terminate_call ONLY when: abusiveDetected, escalation HIGH, and repeated aggression (already sent final_warning)
-  if (lastScriptSent === "final_warning") {
-    const escalationHigh = true;
-    const allowTerminationScript = escalationHigh && hasProfanityOrAbusive && repeatedAggression;
-    return { abusiveDetected: true, severity: "terminate_call", allowTerminationScript };
-  }
-  if (lastScriptSent === "warning_needed") {
-    const escalationHigh = true;
-    const allowTerminationScript = escalationHigh && hasProfanityOrAbusive && repeatedAggression;
-    return { abusiveDetected: true, severity: "final_warning", allowTerminationScript };
-  }
-  // warning_needed: allow termination/language script ONLY if repeated aggression (not single frustrated statement)
-  const escalationHigh = repeatedAggression; // HIGH only when repeated
-  const allowTerminationScript = hasProfanityOrAbusive && repeatedAggression && escalationHigh;
-  return { abusiveDetected: true, severity: "warning_needed", allowTerminationScript };
-}
-
-function isServiceProblemContext(transcript: string): boolean {
-  const lower = transcript.toLowerCase().trim();
-  if (!lower) return false;
-  return SERVICE_PROBLEM_SIGNALS.some((signal) => lower.includes(signal));
-}
 
 function shouldGenerateResponse(transcript: string): boolean {
   const text = transcript.trim().toLowerCase();
@@ -629,6 +541,16 @@ function createHttpServer(): http.Server {
       });
       return;
     }
+    if (pathname === "/dev/boundary-shield-test" && req.method === "POST") {
+      void tryHandleBoundaryShieldTestRequest(
+        req,
+        res,
+        pathname,
+        broadcastToUI,
+        ABUSIVE_SCRIPTS,
+      );
+      return;
+    }
     res.writeHead(404);
     res.end();
   });
@@ -813,15 +735,9 @@ function runServer(): void {
       }
 
       const { abusiveDetected, severity, allowTerminationScript } = detectAbusiveLanguage(rollingTranscript, lastAbusiveScriptSent);
-      const serviceProblem = isServiceProblemContext(rollingTranscript);
-      if (serviceProblem && abusiveDetected) {
-        console.log("[abuse] service-problem context → prioritize problem resolution, skip behavior correction");
-      }
-      // HARD GUARDRAIL: Do NOT allow call-ending or behavioral warning responses unless BOTH:
-      // (1) Escalation level is HIGH (allowTerminationScript implies: explicit profanity or repeated abusive language present),
-      // (2) Explicit profanity or repeated abusive language is present (encoded in allowTerminationScript).
-      // Operational issues (billing, login, account, etc.) never use this path — treat as solvable, not behavioral.
-      if (abusiveDetected && allowTerminationScript && !serviceProblem) {
+      // Boundary Shield scripts when the classifier says the language is agent-directed
+      // (not suppressed by billing/refund/login topic).
+      if (abusiveDetected && allowTerminationScript) {
         console.log("[abuse] detected=true severity=" + severity + " allowTerminationScript=true");
         console.log("[abuse] override_tone=ABUSIVE");
         console.log("[abuse] override_risk=HIGH");

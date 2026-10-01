@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import { AppShell } from "@/components/layout/AppShell";
+import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-serif",
+  display: "swap",
+});
 
 const inter = Inter({
   subsets: ["latin"],
@@ -20,9 +26,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body className="min-h-screen bg-[#0B141F] font-sans antialiased text-[#E6EEF6]">
-        <AppShell>{children}</AppShell>
+    <html lang="en" className={`${playfair.variable} ${inter.variable}`}>
+      <body
+        className={`${playfair.variable} ${inter.variable} min-h-screen bg-[#F5EDE8] font-sans text-[#120D06] antialiased`}
+      >
+        {children}
       </body>
     </html>
   );

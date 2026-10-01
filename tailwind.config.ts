@@ -49,9 +49,9 @@ const config: Config = {
           primary: "var(--cl-espresso)",
           accent: "var(--cl-sand)",
         },
-        espresso: "#292524",
-        sand: "#faf7f2",
-        base: "#F6F4EF",
+        espresso: "#2C1A1E",
+        sand: "#F5EDE8",
+        base: "#F5EDE8",
         "sidebar-bg": "#F5F2EE",
         "nav-bg": "#EFEBE5",
         "header-bg": "#FAFAF9",
@@ -63,9 +63,9 @@ const config: Config = {
         muted: "#5C5C5C",
         ink: "#111111",
         risk: {
-          low: "#15803d",
-          medium: "#475569",
-          high: "#b91c1c",
+          low: "#4E7A5E",
+          medium: "#A87828",
+          high: "#A84848",
         },
         "badge-low": "#D1E7DD",
         "badge-medium": "#E2E8F0",
@@ -73,6 +73,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
+        serif: ["var(--font-serif)", "Playfair Display", "Georgia", "serif"],
       },
       fontSize: {
         "body": ["15px", { lineHeight: "1.5rem" }],

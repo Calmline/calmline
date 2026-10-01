@@ -3,7 +3,7 @@ import type { HTMLAttributes } from "react";
 export function Card({ className = "", children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={`rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-[#E6EEF6] shadow-sm transition hover:border-white/[0.12] hover:-translate-y-0.5 ${className}`}
+      className={`rounded-xl border border-[rgba(150,118,80,0.16)] bg-[#FEFCF8] p-4 text-[#120D06] shadow-[0_2px_10px_rgba(100,70,30,0.06)] transition hover:shadow-[0_2px_12px_rgba(100,70,30,0.08)] ${className}`}
       {...props}
     >
       {children}
