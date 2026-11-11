@@ -7,6 +7,27 @@ import {
 } from "./zendeskOAuth";
 import type { ZendeskReadTransport } from "./zendeskRead";
 
+const REFRESH_STAGE = "refresh-status";
+
+/** A token-endpoint failure that carries no token, request body, or response body. */
+class ZendeskRefreshFailure extends Error {
+  readonly status: number | null;
+
+  constructor(status: number | null) {
+    super("Zendesk token refresh failed");
+    this.name = "ZendeskRefreshFailure";
+    this.status = Number.isInteger(status) ? status : null;
+  }
+}
+
+export function zendeskRefreshFailureLog(status: number | null): string {
+  return JSON.stringify({
+    source: "boundary-shield",
+    stage: REFRESH_STAGE,
+    status: Number.isInteger(status) ? status : null,
+  });
+}
+
 export async function refreshZendeskAccessToken(input: {
   subdomain: string;
   refreshToken: string;
@@ -17,26 +38,27 @@ export async function refreshZendeskAccessToken(input: {
 }): Promise<{ accessToken: string; refreshToken: string; expiresAt: string | null }> {
   const subdomain = assertSubdomain(input.subdomain);
   if (!input.refreshToken.trim() || !input.clientId.trim() || !input.clientSecret) {
-    throw new Error("Zendesk token refresh failed");
+    throw new ZendeskRefreshFailure(null);
   }
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: input.refreshToken,
+    client_id: input.clientId,
+    client_secret: input.clientSecret,
+    scope: "read",
+  });
   const response = await input.transport({
     url: `https://${subdomain}.zendesk.com/oauth/tokens`,
     method: "POST",
-    body: JSON.stringify({
-      grant_type: "refresh_token",
-      refresh_token: input.refreshToken,
-      client_id: input.clientId,
-      client_secret: input.clientSecret,
-      scope: "read",
-    }),
+    body: body.toString(),
   });
   if (response.status !== 200 || !response.body || typeof response.body !== "object") {
-    throw new Error("Zendesk token refresh failed");
+    throw new ZendeskRefreshFailure(response.status);
   }
   const record = response.body as { access_token?: unknown; refresh_token?: unknown; scope?: unknown; expires_in?: unknown };
   const scope = typeof record.scope === "string" ? record.scope : "read";
   if (scope !== "read" || typeof record.access_token !== "string" || !record.access_token || typeof record.refresh_token !== "string" || !record.refresh_token) {
-    throw new Error("Zendesk token refresh failed");
+    throw new ZendeskRefreshFailure(response.status);
   }
   const expiresIn = typeof record.expires_in === "number" ? record.expires_in : null;
   const now = input.now ?? new Date();
@@ -84,7 +106,8 @@ export async function refreshSealedZendeskToken(input: {
     const current = await input.database.getInstallation(input.subdomain);
     if (!current?.sealedAccessToken) return null;
     return openSecret(current.sealedAccessToken, input.tokenKey);
-  } catch {
+  } catch (error) {
+    console.error(zendeskRefreshFailureLog(error instanceof ZendeskRefreshFailure ? error.status : null));
     return null;
   } finally {
     refreshToken = "";

@@ -4,9 +4,11 @@ import test from "node:test";
 import { MemoryBoundaryDatabase } from "./boundaryDatabase";
 import { openSecret, sealSecret } from "./zendeskOAuth";
 import { ROUTING_WRITES_ENABLED } from "./emailRouting";
+import { ZendeskReadFailure, zendeskReadFailureLog } from "./zendeskRead";
 import {
   createRefreshingTransport,
   refreshSealedZendeskToken,
+  zendeskRefreshFailureLog,
 } from "./zendeskTokenRefresh";
 import { handleBoundaryWebhook, WEBHOOK_WRITES_ENABLED } from "./webhookEndpoint";
 import { signZendeskWebhook } from "./zendeskWebhookSignature";
@@ -49,11 +51,14 @@ test("a 401 refreshes once, stores both rotated tokens, and retries the same GET
       now: NOW,
       transport: async (request) => {
         posts += 1;
-        const body = JSON.parse(request.body) as { grant_type: string; scope: string; refresh_token: string };
+        const body = new URLSearchParams(request.body);
         assert.equal(request.url, "https://example.zendesk.com/oauth/tokens");
-        assert.equal(body.grant_type, "refresh_token");
-        assert.equal(body.scope, "read");
-        assert.equal(body.refresh_token, "refresh-token");
+        assert.equal(body.get("grant_type"), "refresh_token");
+        assert.equal(body.get("scope"), "read");
+        assert.equal(body.get("client_id"), "calmline-client");
+        assert.equal(body.get("client_secret"), "client-secret");
+        assert.equal(body.get("refresh_token"), "refresh-token");
+        assert.equal(request.body.startsWith("{"), false);
         return {
           status: 200,
           body: { access_token: "fresh-access", refresh_token: "fresh-refresh", scope: "read", expires_in: 1800 },
@@ -84,38 +89,64 @@ test("a rejected refresh, a storage failure, or a second 401 does not retry agai
   await installation(database);
   const expected = (await database.getInstallation("example"))?.sealedRefreshToken ?? "";
   let posts = 0;
-  const rejected = await refreshSealedZendeskToken({
-    subdomain: "example",
-    expectedSealedRefreshToken: expected,
-    database,
-    tokenKey: KEY,
-    clientId: "calmline-client",
-    clientSecret: "client-secret",
-    transport: async () => {
-      posts += 1;
-      return { status: 401, body: { error: "invalid_token", error_description: "revoked" } };
-    },
-  });
+  const lines: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    lines.push(args);
+  };
+  let rejected: string | null = null;
+  try {
+    rejected = await refreshSealedZendeskToken({
+      subdomain: "example",
+      expectedSealedRefreshToken: expected,
+      database,
+      tokenKey: KEY,
+      clientId: "calmline-client",
+      clientSecret: "client-secret",
+      transport: async () => {
+        posts += 1;
+        return { status: 401, body: { error: "invalid_token", error_description: "revoked" } };
+      },
+    });
+  } finally {
+    console.error = original;
+  }
   assert.equal(rejected, null);
   assert.equal(posts, 1);
+  assert.deepEqual(lines, [[zendeskRefreshFailureLog(401)]]);
+  assert.equal(JSON.stringify(lines).includes("revoked"), false);
+  assert.equal(JSON.stringify(lines).includes("refresh-token"), false);
+  assert.equal(JSON.stringify(lines).includes("client-secret"), false);
   assert.equal(openSecret((await database.getInstallation("example"))?.sealedAccessToken ?? "", KEY), "expired-access");
 
   database.rotateSealedOAuth = async () => {
     throw new Error("OAuth token storage failed");
   };
-  const unsaved = await refreshSealedZendeskToken({
-    subdomain: "example",
-    expectedSealedRefreshToken: expected,
-    database,
-    tokenKey: KEY,
-    clientId: "calmline-client",
-    clientSecret: "client-secret",
-    transport: async () => ({
-      status: 200,
-      body: { access_token: "should-not-store", refresh_token: "should-not-store-refresh", scope: "read", expires_in: 1800 },
-    }),
-  });
+  const storageLines: unknown[][] = [];
+  const storageLog = console.error;
+  console.error = (...args: unknown[]) => {
+    storageLines.push(args);
+  };
+  let unsaved: string | null = null;
+  try {
+    unsaved = await refreshSealedZendeskToken({
+      subdomain: "example",
+      expectedSealedRefreshToken: expected,
+      database,
+      tokenKey: KEY,
+      clientId: "calmline-client",
+      clientSecret: "client-secret",
+      transport: async () => ({
+        status: 200,
+        body: { access_token: "should-not-store", refresh_token: "should-not-store-refresh", scope: "read", expires_in: 1800 },
+      }),
+    });
+  } finally {
+    console.error = storageLog;
+  }
   assert.equal(unsaved, null);
+  assert.deepEqual(storageLines, [[zendeskRefreshFailureLog(null)]]);
+  assert.equal(JSON.stringify(storageLines).includes("should-not-store"), false);
   assert.equal(openSecret((await database.getInstallation("example"))?.sealedAccessToken ?? "", KEY), "expired-access");
 
   const sends: string[] = [];
@@ -237,4 +268,136 @@ test("the webhook retries one expired read and still does not write the ticket",
   assert.equal(ROUTING_WRITES_ENABLED, false);
   assert.deepEqual(tokens.slice(0, 2), ["expired-access", "fresh-access"]);
   assert.equal(JSON.stringify(payload).includes(INSULT), false);
+});
+
+test("a rejected refresh logs only its status and does not release the ticket", async () => {
+  const database = new MemoryBoundaryDatabase();
+  await installation(database);
+  const expected = (await database.getInstallation("example"))?.sealedRefreshToken ?? "";
+  const body = JSON.stringify({
+    account: { subdomain: "example" },
+    ticket: { id: "4" },
+    comment: { id: "100" },
+  });
+  const lines: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    lines.push(args);
+  };
+  const gets: string[] = [];
+  try {
+    const response = await handleBoundaryWebhook(new Request("http://localhost/api/zendesk/boundary-shield/webhook", {
+      method: "POST",
+      headers: {
+        "x-zendesk-webhook-signature": signZendeskWebhook(SECRET, NOW.toISOString(), body),
+        "x-zendesk-webhook-signature-timestamp": NOW.toISOString(),
+      },
+      body,
+    }), {
+      secret: SECRET,
+      now: NOW,
+      database,
+      tokenKey: KEY,
+      zendeskGet: async (request) => {
+        gets.push(request.token);
+        return { status: 401, body: { error: "invalid_token" } };
+      },
+      rotateToken: (input) => refreshSealedZendeskToken({
+        ...input,
+        database,
+        tokenKey: KEY,
+        clientId: "calmline-client",
+        clientSecret: "client-secret",
+        transport: async (request) => {
+          const form = new URLSearchParams(request.body);
+          assert.equal(form.get("grant_type"), "refresh_token");
+          assert.equal(form.get("scope"), "read");
+          return { status: 400, body: { error: "invalid_grant", error_description: "revoked", refresh_token: "refresh-token" } };
+        },
+      }),
+    });
+    const payload = await response.json() as { accepted: boolean; released: boolean; executed: boolean; zendeskWrite: string };
+    assert.equal(response.status, 503);
+    assert.equal(payload.accepted, false);
+    assert.equal(payload.released, false);
+    assert.equal(payload.executed, false);
+    assert.equal(payload.zendeskWrite, "disabled");
+    assert.deepEqual(gets, ["expired-access"]);
+    assert.deepEqual(lines, [
+      [zendeskRefreshFailureLog(400)],
+      [zendeskReadFailureLog(new ZendeskReadFailure("comments-status", 401))],
+    ]);
+    assert.equal(JSON.stringify(lines).includes("refresh-token"), false);
+    assert.equal(JSON.stringify(lines).includes("revoked"), false);
+    assert.equal(JSON.stringify(payload).includes("refresh-status"), false);
+    assert.equal((await database.listTicket("example", "4")).length, 0);
+    assert.equal(openSecret((await database.getInstallation("example"))?.sealedAccessToken ?? "", KEY), "expired-access");
+  } finally {
+    console.error = original;
+  }
+});
+
+test("one failed retry returns 503 and does not refresh again", async () => {
+  const database = new MemoryBoundaryDatabase();
+  await installation(database);
+  const body = JSON.stringify({
+    account: { subdomain: "example" },
+    ticket: { id: "4" },
+    comment: { id: "100" },
+  });
+  const lines: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    lines.push(args);
+  };
+  const gets: string[] = [];
+  let rotations = 0;
+  try {
+    const response = await handleBoundaryWebhook(new Request("http://localhost/api/zendesk/boundary-shield/webhook", {
+      method: "POST",
+      headers: {
+        "x-zendesk-webhook-signature": signZendeskWebhook(SECRET, NOW.toISOString(), body),
+        "x-zendesk-webhook-signature-timestamp": NOW.toISOString(),
+      },
+      body,
+    }), {
+      secret: SECRET,
+      now: NOW,
+      database,
+      tokenKey: KEY,
+      zendeskGet: async (request) => {
+        gets.push(request.token);
+        return { status: 401, body: { error: "invalid_token" } };
+      },
+      rotateToken: async () => {
+        rotations += 1;
+        return "fresh-access";
+      },
+    });
+    const payload = await response.json() as { accepted: boolean; released: boolean; executed: boolean; zendeskWrite: string };
+    assert.equal(response.status, 503);
+    assert.equal(payload.accepted, false);
+    assert.equal(payload.released, false);
+    assert.equal(payload.executed, false);
+    assert.equal(payload.zendeskWrite, "disabled");
+    assert.equal(WEBHOOK_WRITES_ENABLED, false);
+    assert.equal(ROUTING_WRITES_ENABLED, false);
+    assert.equal(rotations, 1);
+    assert.deepEqual(gets, ["expired-access", "fresh-access"]);
+    assert.deepEqual(lines, [[zendeskReadFailureLog(new ZendeskReadFailure("comments-status", 401))]]);
+    assert.equal(JSON.stringify(lines).includes("fresh-access"), false);
+    assert.equal(JSON.stringify(payload).includes(INSULT), false);
+    assert.equal((await database.listTicket("example", "4")).length, 0);
+  } finally {
+    console.error = original;
+  }
+});
+
+test("the refresh request uses form encoding", () => {
+  const route = fs.readFileSync("src/app/api/zendesk/boundary-shield/webhook/route.ts", "utf8");
+  const refresh = fs.readFileSync("src/lib/boundary-shield/zendeskTokenRefresh.ts", "utf8");
+  assert.match(route, /"content-type": "application\/x-www-form-urlencoded"/);
+  assert.equal(route.includes('"content-type": "application/json"'), false);
+  assert.match(refresh, /new URLSearchParams\(\{[^}]*grant_type: "refresh_token"/);
+  assert.match(refresh, /scope: "read"/);
 });

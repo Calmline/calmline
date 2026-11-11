@@ -32,7 +32,7 @@ export async function POST(request: Request): Promise<Response> {
           transport: async (tokenRequest) => {
             const response = await fetch(tokenRequest.url, {
               method: "POST",
-              headers: { "content-type": "application/json", accept: "application/json" },
+              headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
               body: tokenRequest.body,
             });
             return { status: response.status, body: await response.json().catch(() => null) };
