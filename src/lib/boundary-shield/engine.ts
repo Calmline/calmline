@@ -1,4 +1,4 @@
-import { detectAbusiveLanguage } from "../../../realtime-gateway/src/abuseDetection";
+import { detectAbusiveLanguage } from "./abuseDetection";
 import { emailIncidentDecision, emailThreatLevel } from "./emailIncident";
 import { AGENT_ACTIONS, WARNING_LADDER_SCRIPTS, alertTitle } from "./scripts";
 import type {
