@@ -1,0 +1,8 @@
+{
+  "app": {
+    "name": "Calmline Boundary Shield",
+    "short_description": "Warns an agent when simulated call language becomes abusive.",
+    "long_description": "A Support ticket sidebar for Boundary Shield. It plays synthetic call transcripts and shows the warning ladder. It does not access Zendesk Talk audio or live Voice transcripts.",
+    "installation_instructions": "Upload this private app, then open a ticket. The sidebar stays on Monitoring until a qualifying abusive customer transcript event arrives. It does not read the ticket body or live call audio. The simulated call is only in the local demo."
+  }
+}

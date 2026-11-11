@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CalmLine Boundary Shield</title>
+    <link rel="stylesheet" href="sidebar-0.1.9.css" />
+  </head>
+  <body>
+    <main id="app">
+      <header class="brand">
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="28" height="28">
+            <path fill="currentColor" d="M16 2.5 5 7.2v8.1c0 6.4 4.2 11.4 11 13.2 6.8-1.8 11-6.8 11-13.2V7.2L16 2.5Zm0 3.2 8.2 3.6v6c0 4.9-3.1 8.8-8.2 10.4-5.1-1.6-8.2-5.5-8.2-10.4v-6L16 5.7Z"/>
+            <path fill="currentColor" d="M14.2 16.6 12 14.4l-1.2 1.2 3.4 3.4 7-7-1.2-1.2-5.8 5.8Z"/>
+          </svg>
+        </span>
+        <div class="brand-copy">
+          <p class="wordmark">CalmLine</p>
+          <h1>Boundary Shield</h1>
+        </div>
+      </header>
+      <p id="mode" class="version">Boundary Shield 0.1.9</p>
+
+      <section id="state-card" class="state-card" data-state="not-connected">
+        <p class="kicker">Protection</p>
+        <h2 id="state-title">Not connected</h2>
+        <p id="state-detail">The Zendesk conversation has not been read yet.</p>
+        <p id="history-note" class="history-note"></p>
+        <div id="response" hidden>
+          <dl id="card-facts" class="facts" hidden>
+            <div><dt>Category</dt><dd id="card-category"></dd></div>
+            <div><dt>Severity</dt><dd id="card-severity"></dd></div>
+            <div><dt>Recommended action</dt><dd id="card-action"></dd></div>
+            <div><dt>Manager review</dt><dd id="card-review"></dd></div>
+          </dl>
+          <p class="label">Suggested response</p>
+          <p id="response-script"></p>
+        </div>
+      </section>
+      <p id="status" class="sr-only" role="status">Not connected</p>
+
+      <section class="channels" aria-label="Channels">
+        <div class="channel"><span>Email</span><strong id="channel-email">Not connected</strong></div>
+        <div class="channel"><span>Chat</span><strong id="channel-chat">Not connected</strong></div>
+        <div class="channel"><span>Voice</span><strong id="channel-voice">Not connected</strong></div>
+      </section>
+      <p id="banner" class="voice-note">
+        Live call audio and live transcripts are not connected. No warning is shown until a qualifying abusive customer transcript event is received.
+      </p>
+
+      <section id="readout" class="readout" aria-label="Read diagnostics">Read: waiting
+Entries received: 0
+End-user evaluated: 0
+Staff skipped: 0
+Other skipped: 0
+Error: none</section>
+
+      <section class="counts" aria-label="Message and warning counts">
+        <div><strong id="count-evaluated">0</strong><span>Customer messages</span></div>
+        <div><strong id="count-warnings">0</strong><span>Warnings</span></div>
+      </section>
+
+      <section id="incident-history" class="incident-history" hidden>
+        <p class="label">Incident history</p>
+        <ol id="incident-list"></ol>
+      </section>
+
+      <details id="advanced">
+        <summary>Advanced diagnostics</summary>
+        <p class="diagnostic-note">When a read succeeds and no abuse is found, the status is Monitoring — no abuse detected.</p>
+        <p id="framework-status">Framework ready: no
+Read attempted: no
+Read error: none</p>
+        <section id="diagnostics" aria-label="Conversation diagnostics">
+          <p class="label">Conversation</p>
+          <p id="diagnostics-text">Conversation received: no
+Entries received: 0
+End-user messages evaluated: 0
+Agent/admin messages skipped: 0
+Read failed: no</p>
+        </section>
+        <section id="email-diagnostics" aria-label="Email diagnostics">
+          <p class="label">Email</p>
+          <p id="email-diagnostics-text">Connected: no
+Entries received: 0
+End-user replies evaluated: 0
+Agent/admin replies skipped: 0
+Read failed: no</p>
+        </section>
+        <section id="chat-diagnostics" aria-label="Chat diagnostics">
+          <p class="label">Chat</p>
+          <p id="chat-diagnostics-text">Entries received: 0
+End-user messages evaluated: 0
+Agent/admin messages skipped: 0</p>
+        </section>
+        <p class="diagnostic-note">Customer message text is not shown in diagnostics. It appears only in the incident review while a warning is open.</p>
+        <ol id="transcript" hidden></ol>
+      </details>
+
+      <section id="demo-tools" aria-label="Simulated call" hidden>
+        <p class="label">Simulator</p>
+        <label for="scenario">Simulated call</label>
+        <select id="scenario"></select>
+        <div class="actions">
+          <button id="play" type="button">Play simulated call</button>
+          <button id="reset" type="button">Reset</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="popup" class="popup" hidden>
+      <div
+        id="dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="warning-title"
+        aria-describedby="warning-description warning-script"
+        tabindex="-1"
+      >
+        <p class="kicker">Incident review</p>
+        <h2 id="warning-title">Boundary Shield</h2>
+        <p id="warning-description">
+          Language aimed at the agent was detected. Read the suggested response, then choose one option.
+          Nothing is sent automatically.
+        </p>
+        <dl id="dialog-facts" class="facts" hidden>
+          <div><dt>Category</dt><dd id="dialog-category"></dd></div>
+          <div><dt>Severity</dt><dd id="dialog-severity"></dd></div>
+          <div><dt>Recommended action</dt><dd id="dialog-action"></dd></div>
+          <div><dt>Manager review</dt><dd id="dialog-review"></dd></div>
+        </dl>
+        <div class="quote">
+          <p class="label">Customer language</p>
+          <p id="warning-quote"></p>
+        </div>
+        <div class="script">
+          <p class="label">Suggested script</p>
+          <p id="warning-script"></p>
+        </div>
+        <div class="actions">
+          <button id="acknowledge" type="button">Acknowledge</button>
+          <button id="continue" type="button">Continue</button>
+          <button id="review" type="button">Request supervisor review</button>
+        </div>
+      </div>
+    </div>
+    <script src="https://static.zdassets.com/zendesk_app_framework_sdk/2.0/zaf_sdk.min.js"></script>
+    <script src="sidebar-0.1.9.js"></script>
+  </body>
+</html>

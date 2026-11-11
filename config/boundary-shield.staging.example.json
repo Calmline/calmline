@@ -1,0 +1,8 @@
+{
+  "environment": "staging",
+  "storage": "supabase-postgres",
+  "webhookPath": "/api/zendesk/boundary-shield/webhook",
+  "zendeskWritesEnabled": false,
+  "fileStoreForProduction": false,
+  "rollbackDocument": "docs/boundary-shield-staging.md"
+}
