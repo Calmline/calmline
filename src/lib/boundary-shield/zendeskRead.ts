@@ -16,6 +16,34 @@ export type ZendeskCommentRecord = {
 
 const MAX_COMMENT_PAGES = 20;
 
+export const ZENDESK_READ_STAGES = [
+  "comments-status",
+  "comments-body",
+  "comment-missing",
+  "author-id",
+  "author-status",
+  "author-body",
+] as const;
+
+export type ZendeskReadStage = (typeof ZENDESK_READ_STAGES)[number];
+
+/** A lookup failure that carries no URL, token, or response body. */
+export class ZendeskReadFailure extends Error {
+  readonly stage: ZendeskReadStage;
+  readonly status: number | null;
+
+  constructor(stage: ZendeskReadStage, status: number | null) {
+    super("Zendesk read failed");
+    this.name = "ZendeskReadFailure";
+    this.stage = stage;
+    this.status = Number.isInteger(status) ? status : null;
+  }
+}
+
+export function zendeskReadFailureLog(failure: ZendeskReadFailure): string {
+  return JSON.stringify({ source: "boundary-shield", stage: failure.stage, status: failure.status });
+}
+
 function clean(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
 }
@@ -70,14 +98,15 @@ export async function readZendeskComment(input: {
   let comment: Record<string, unknown> | null = null;
   const seen = new Set<string>();
   for (let page = 0; page < MAX_COMMENT_PAGES && pageUrl; page += 1) {
-    if (seen.has(pageUrl)) throw new Error("Zendesk comment lookup failed");
+    if (seen.has(pageUrl)) throw new ZendeskReadFailure("comment-missing", null);
     seen.add(pageUrl);
     const response = await input.transport({ method: "GET", url: pageUrl, token: input.accessToken });
-    if (response.status !== 200 || !response.body || typeof response.body !== "object") {
-      throw new Error("Zendesk comment lookup failed");
+    if (response.status !== 200) throw new ZendeskReadFailure("comments-status", response.status);
+    if (!response.body || typeof response.body !== "object" || Array.isArray(response.body)) {
+      throw new ZendeskReadFailure("comments-body", response.status);
     }
     const comments = (response.body as { comments?: unknown }).comments;
-    if (!Array.isArray(comments)) throw new Error("Zendesk comment lookup failed");
+    if (!Array.isArray(comments)) throw new ZendeskReadFailure("comments-body", response.status);
     const match = comments.find((item) => {
       return Boolean(item) && typeof item === "object" && clean((item as { id?: unknown }).id) === input.commentId;
     });
@@ -87,16 +116,17 @@ export async function readZendeskComment(input: {
     }
     pageUrl = nextCommentsPage(response.body, subdomain, input.ticketId);
   }
-  if (!comment) throw new Error("Zendesk comment lookup failed");
+  if (!comment) throw new ZendeskReadFailure("comment-missing", null);
   const authorId = clean(comment.author_id);
-  if (!/^\d+$/.test(authorId)) throw new Error("Zendesk comment lookup failed");
+  if (!/^\d+$/.test(authorId)) throw new ZendeskReadFailure("author-id", null);
   const authorResponse = await input.transport({
     method: "GET",
     url: `https://${subdomain}.zendesk.com/api/v2/users/${authorId}.json`,
     token: input.accessToken,
   });
-  if (authorResponse.status !== 200 || !authorResponse.body || typeof authorResponse.body !== "object") {
-    throw new Error("Zendesk author lookup failed");
+  if (authorResponse.status !== 200) throw new ZendeskReadFailure("author-status", authorResponse.status);
+  if (!authorResponse.body || typeof authorResponse.body !== "object" || Array.isArray(authorResponse.body)) {
+    throw new ZendeskReadFailure("author-body", authorResponse.status);
   }
   const user = (authorResponse.body as { user?: { role?: unknown } }).user;
   const via = comment.via;

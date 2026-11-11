@@ -3,6 +3,7 @@ import type { RoutingAuditEvent } from "./emailRouting";
 import type { BoundaryDatabase } from "./boundaryDatabase";
 import { MemoryRoutingStore } from "./routingStore";
 import { openSecret } from "./zendeskOAuth";
+import { ZendeskReadFailure, zendeskReadFailureLog } from "./zendeskRead";
 import { verifyZendeskWebhookSignature } from "./zendeskWebhookSignature";
 
 /** Staging and production webhook handlers cannot enable Zendesk writes. */
@@ -103,7 +104,8 @@ export async function handleBoundaryWebhook(request: Request, deps: WebhookDepen
       visibility = remote.publicComment;
       authorRole = clean(remote.authorRole);
       createdAt = clean(remote.createdAt) || createdAt;
-    } catch {
+    } catch (error) {
+      if (error instanceof ZendeskReadFailure) console.error(zendeskReadFailureLog(error));
       return json({ accepted: false, released: false }, 503);
     } finally {
       accessToken = "";
