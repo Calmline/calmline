@@ -170,7 +170,13 @@ const REGENERATE_ADDON = `
 
 This is a regenerate request. Provide an alternative approach with a different phrasing style. Avoid repeating prior structure. Do not reuse any cached or previous response; generate a fresh response.`;
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+function openAIClient(): OpenAI {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("The OPENAI_API_KEY environment variable is missing or empty.");
+  }
+  return new OpenAI({ apiKey });
+}
 
 export class InvalidAIResponseError extends Error {
   constructor(message: string = "Invalid AI response format") {
@@ -245,7 +251,7 @@ export async function analyzeTranscript(
     systemPrompt = systemPrompt + REGENERATE_ADDON;
   }
 
-  const completion = await openai.chat.completions.create({
+  const completion = await openAIClient().chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
       { role: "system", content: systemPrompt },
