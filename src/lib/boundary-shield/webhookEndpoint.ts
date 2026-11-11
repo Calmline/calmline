@@ -3,7 +3,8 @@ import type { RoutingAuditEvent } from "./emailRouting";
 import type { BoundaryDatabase } from "./boundaryDatabase";
 import { MemoryRoutingStore } from "./routingStore";
 import { openSecret } from "./zendeskOAuth";
-import { ZendeskReadFailure, zendeskReadFailureLog } from "./zendeskRead";
+import { ZendeskReadFailure, readZendeskComment, zendeskReadFailureLog, type ZendeskReadTransport } from "./zendeskRead";
+import { createRefreshingTransport } from "./zendeskTokenRefresh";
 import { verifyZendeskWebhookSignature } from "./zendeskWebhookSignature";
 
 /** Staging and production webhook handlers cannot enable Zendesk writes. */
@@ -22,12 +23,19 @@ export type ZendeskCommentReader = (input: {
   createdAt: string;
 }>;
 
+export type ZendeskTokenRotator = (input: {
+  subdomain: string;
+  expectedSealedRefreshToken: string;
+}) => Promise<string | null>;
+
 export type WebhookDependencies = {
   secret: string;
   now: Date;
   database: BoundaryDatabase | null;
   tokenKey?: Buffer | null;
   readComment?: ZendeskCommentReader;
+  zendeskGet?: ZendeskReadTransport;
+  rotateToken?: ZendeskTokenRotator;
 };
 
 function clean(value: unknown): string {
@@ -92,13 +100,28 @@ export async function handleBoundaryWebhook(request: Request, deps: WebhookDepen
   let createdAt = clean(record.comment?.created_at);
   if (!text && ticketId && commentId) {
     const sealed = installation.sealedAccessToken;
-    if (!deps.readComment || !deps.tokenKey || !sealed) {
+    const reader = deps.readComment ?? (deps.zendeskGet ? (input: {
+      subdomain: string;
+      accessToken: string;
+      ticketId: string;
+      commentId: string;
+    }) => readZendeskComment({
+      ...input,
+      transport: createRefreshingTransport({
+        send: deps.zendeskGet as ZendeskReadTransport,
+        rotate: () => deps.rotateToken?.({
+          subdomain: accountId,
+          expectedSealedRefreshToken: installation.sealedRefreshToken ?? "",
+        }) ?? Promise.resolve(null),
+      }),
+    }) : null);
+    if (!reader || !deps.tokenKey || !sealed) {
       return json({ accepted: false, released: false }, 503);
     }
     let accessToken = "";
     try {
       accessToken = openSecret(sealed, deps.tokenKey);
-      const remote = await deps.readComment({ subdomain: accountId, accessToken, ticketId, commentId });
+      const remote = await reader({ subdomain: accountId, accessToken, ticketId, commentId });
       text = clean(remote.text);
       channel = clean(remote.channel) || channel;
       visibility = remote.publicComment;

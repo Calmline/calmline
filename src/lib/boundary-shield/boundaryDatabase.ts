@@ -38,6 +38,13 @@ export interface BoundaryDatabase {
     sealedRefreshToken: string | null;
     tokenExpiresAt: string | null;
   }): Promise<void>;
+  rotateSealedOAuth(record: {
+    subdomain: string;
+    expectedSealedRefreshToken: string;
+    sealedAccessToken: string;
+    sealedRefreshToken: string;
+    tokenExpiresAt: string | null;
+  }): Promise<boolean>;
   listTicket(accountId: string, ticketId: string): Promise<RoutingDecision[]>;
   commit(input: {
     deliveryId: string;
@@ -89,6 +96,27 @@ export class MemoryBoundaryDatabase implements BoundaryDatabase {
         sealedRefreshToken: record.sealedRefreshToken,
         tokenExpiresAt: record.tokenExpiresAt,
       });
+    });
+  }
+
+  rotateSealedOAuth(record: {
+    subdomain: string;
+    expectedSealedRefreshToken: string;
+    sealedAccessToken: string;
+    sealedRefreshToken: string;
+    tokenExpiresAt: string | null;
+  }): Promise<boolean> {
+    return this.exclusive(() => {
+      const subdomain = record.subdomain.trim().toLowerCase();
+      const existing = this.installations.get(subdomain);
+      if (!existing || existing.sealedRefreshToken !== record.expectedSealedRefreshToken) return false;
+      this.installations.set(subdomain, {
+        ...existing,
+        sealedAccessToken: record.sealedAccessToken,
+        sealedRefreshToken: record.sealedRefreshToken,
+        tokenExpiresAt: record.tokenExpiresAt,
+      });
+      return true;
     });
   }
 
@@ -169,6 +197,17 @@ export function createSupabaseBoundaryDatabase(client: RpcClient): BoundaryDatab
         token_expires_at: record.tokenExpiresAt,
       });
       if (error) throw new Error("OAuth token storage failed");
+    },
+    async rotateSealedOAuth(record) {
+      const { data, error } = await client.rpc("boundary_shield_rotate_oauth", {
+        account_id: record.subdomain,
+        expected_sealed_refresh_token: record.expectedSealedRefreshToken,
+        sealed_access_token: record.sealedAccessToken,
+        sealed_refresh_token: record.sealedRefreshToken,
+        token_expires_at: record.tokenExpiresAt,
+      });
+      if (error) throw new Error("OAuth token storage failed");
+      return data === true;
     },
     listTicket(accountId, ticketId) {
       return client.ticket(accountId, ticketId);
