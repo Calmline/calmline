@@ -22,6 +22,15 @@ export type OauthTransport = (request: {
 
 const SUBDOMAIN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
+export function tokenKeyFromEncoded(value: string | undefined): Buffer | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^[0-9a-f]{64}$/i.test(trimmed)) return Buffer.from(trimmed, "hex");
+  if (!/^[A-Za-z0-9+/_-]+=*$/.test(trimmed)) return null;
+  const decoded = Buffer.from(trimmed, trimmed.includes("-") || trimmed.includes("_") ? "base64url" : "base64");
+  return decoded.length === 32 ? decoded : null;
+}
+
 export function assertSubdomain(value: string): string {
   const subdomain = value.trim().toLowerCase();
   if (!SUBDOMAIN.test(subdomain)) throw new Error("Invalid Zendesk subdomain");
@@ -57,11 +66,13 @@ export function zendeskAuthorizeUrl(input: {
   scope?: string;
 }): string {
   const subdomain = assertSubdomain(input.subdomain);
+  const scope = input.scope ?? "read";
+  if (scope !== "read") throw new Error("Zendesk OAuth scope must be read");
   const url = new URL(`https://${subdomain}.zendesk.com/oauth/authorizations/new`);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", input.clientId);
   url.searchParams.set("redirect_uri", input.redirectUri);
-  url.searchParams.set("scope", input.scope ?? "read write");
+  url.searchParams.set("scope", scope);
   url.searchParams.set("state", input.state);
   return url.toString();
 }
@@ -72,16 +83,19 @@ export async function exchangeAuthorizationCode(input: {
   clientSecret: string;
   code: string;
   redirectUri: string;
+  scope?: string;
   transport: OauthTransport;
 }): Promise<OauthToken> {
   const subdomain = assertSubdomain(input.subdomain);
+  const scope = input.scope ?? "read";
+  if (scope !== "read") throw new Error("Zendesk OAuth scope must be read");
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code: input.code,
     client_id: input.clientId,
     client_secret: input.clientSecret,
     redirect_uri: input.redirectUri,
-    scope: "read write",
+    scope,
   });
   const response = await input.transport({
     url: `https://${subdomain}.zendesk.com/oauth/tokens`,
@@ -97,7 +111,7 @@ export async function exchangeAuthorizationCode(input: {
   return {
     accessToken: record.access_token,
     refreshToken: typeof record.refresh_token === "string" ? record.refresh_token : null,
-    scope: typeof record.scope === "string" ? record.scope : "read write",
+    scope: typeof record.scope === "string" ? record.scope : "read",
     expiresAt: expiresIn === null ? null : new Date(Date.now() + expiresIn * 1000).toISOString(),
   };
 }

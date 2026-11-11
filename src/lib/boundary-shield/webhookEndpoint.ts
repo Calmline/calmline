@@ -2,15 +2,31 @@ import { EmailRoutingWorkflow } from "./emailRouting";
 import type { RoutingAuditEvent } from "./emailRouting";
 import type { BoundaryDatabase } from "./boundaryDatabase";
 import { MemoryRoutingStore } from "./routingStore";
+import { openSecret } from "./zendeskOAuth";
 import { verifyZendeskWebhookSignature } from "./zendeskWebhookSignature";
 
 /** Staging and production webhook handlers cannot enable Zendesk writes. */
 export const WEBHOOK_WRITES_ENABLED = false;
 
+export type ZendeskCommentReader = (input: {
+  subdomain: string;
+  accessToken: string;
+  ticketId: string;
+  commentId: string;
+}) => Promise<{
+  text: string;
+  publicComment: boolean;
+  channel: string;
+  authorRole: string;
+  createdAt: string;
+}>;
+
 export type WebhookDependencies = {
   secret: string;
   now: Date;
   database: BoundaryDatabase | null;
+  tokenKey?: Buffer | null;
+  readComment?: ZendeskCommentReader;
 };
 
 function clean(value: unknown): string {
@@ -68,7 +84,31 @@ export async function handleBoundaryWebhook(request: Request, deps: WebhookDepen
   const ticketId = clean(record.ticket?.id);
   const commentId = clean(record.comment?.id);
   const deliveryId = (request.headers.get("x-zendesk-webhook-invocation-id") ?? "").trim() || `comment:${accountId}:${ticketId}:${commentId}`;
-  const visibility = record.comment?.public;
+  let text = clean(record.comment?.plain_body) || clean(record.comment?.body);
+  let channel = channelFrom(record.ticket?.via);
+  let visibility = record.comment?.public;
+  let authorRole = clean(record.comment?.author?.role);
+  let createdAt = clean(record.comment?.created_at);
+  if (!text && ticketId && commentId) {
+    const sealed = installation.sealedAccessToken;
+    if (!deps.readComment || !deps.tokenKey || !sealed) {
+      return json({ accepted: false, released: false }, 503);
+    }
+    let accessToken = "";
+    try {
+      accessToken = openSecret(sealed, deps.tokenKey);
+      const remote = await deps.readComment({ subdomain: accountId, accessToken, ticketId, commentId });
+      text = clean(remote.text);
+      channel = clean(remote.channel) || channel;
+      visibility = remote.publicComment;
+      authorRole = clean(remote.authorRole);
+      createdAt = clean(remote.createdAt) || createdAt;
+    } catch {
+      return json({ accepted: false, released: false }, 503);
+    } finally {
+      accessToken = "";
+    }
+  }
   let prior;
   try {
     prior = ticketId ? await deps.database.listTicket(accountId, ticketId) : [];
@@ -84,11 +124,11 @@ export async function handleBoundaryWebhook(request: Request, deps: WebhookDepen
     accountId,
     ticketId,
     commentId,
-    channel: channelFrom(record.ticket?.via),
-    authorRole: clean(record.comment?.author?.role),
+    channel,
+    authorRole,
     publicComment: typeof visibility === "boolean" ? visibility : null,
-    text: clean(record.comment?.plain_body) || clean(record.comment?.body),
-    createdAt: clean(record.comment?.created_at) || deps.now.toISOString(),
+    text,
+    createdAt: createdAt || deps.now.toISOString(),
   }, deps.now.toISOString());
   const audit: RoutingAuditEvent = {
     at: deps.now.toISOString(),

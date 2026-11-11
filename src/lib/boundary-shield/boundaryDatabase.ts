@@ -6,6 +6,8 @@ export type TenantInstallationRecord = {
   reviewGroupId: string;
   normalGroupId: string;
   sealedAccessToken: string | null;
+  sealedRefreshToken?: string | null;
+  tokenExpiresAt?: string | null;
 };
 
 export type CommitResult = {
@@ -30,6 +32,12 @@ export type StuckScreening = {
 export interface BoundaryDatabase {
   getInstallation(subdomain: string): Promise<TenantInstallationRecord | null>;
   saveInstallation(record: TenantInstallationRecord): Promise<void>;
+  storeSealedOAuth(record: {
+    subdomain: string;
+    sealedAccessToken: string;
+    sealedRefreshToken: string | null;
+    tokenExpiresAt: string | null;
+  }): Promise<void>;
   listTicket(accountId: string, ticketId: string): Promise<RoutingDecision[]>;
   commit(input: {
     deliveryId: string;
@@ -62,6 +70,25 @@ export class MemoryBoundaryDatabase implements BoundaryDatabase {
   saveInstallation(record: TenantInstallationRecord): Promise<void> {
     return this.exclusive(() => {
       this.installations.set(record.subdomain.trim().toLowerCase(), { ...record });
+    });
+  }
+
+  storeSealedOAuth(record: {
+    subdomain: string;
+    sealedAccessToken: string;
+    sealedRefreshToken: string | null;
+    tokenExpiresAt: string | null;
+  }): Promise<void> {
+    return this.exclusive(() => {
+      const subdomain = record.subdomain.trim().toLowerCase();
+      const existing = this.installations.get(subdomain);
+      if (!existing) throw new Error("installation is missing");
+      this.installations.set(subdomain, {
+        ...existing,
+        sealedAccessToken: record.sealedAccessToken,
+        sealedRefreshToken: record.sealedRefreshToken,
+        tokenExpiresAt: record.tokenExpiresAt,
+      });
     });
   }
 
@@ -120,7 +147,7 @@ export class MemoryBoundaryDatabase implements BoundaryDatabase {
 }
 
 type RpcClient = {
-  rpc: (fn: string, args: { payload?: unknown; max_age?: string }) => Promise<{ data: unknown; error: { message: string } | null }>;
+  rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
   installation: (subdomain: string) => Promise<TenantInstallationRecord | null>;
   ticket: (accountId: string, ticketId: string) => Promise<RoutingDecision[]>;
 };
@@ -133,6 +160,15 @@ export function createSupabaseBoundaryDatabase(client: RpcClient): BoundaryDatab
     },
     async saveInstallation() {
       throw new Error("Installation writes are not part of the webhook request");
+    },
+    async storeSealedOAuth(record) {
+      const { error } = await client.rpc("boundary_shield_store_oauth", {
+        account_id: record.subdomain,
+        sealed_access_token: record.sealedAccessToken,
+        sealed_refresh_token: record.sealedRefreshToken,
+        token_expires_at: record.tokenExpiresAt,
+      });
+      if (error) throw new Error("OAuth token storage failed");
     },
     listTicket(accountId, ticketId) {
       return client.ticket(accountId, ticketId);
@@ -184,7 +220,7 @@ export function databaseFromEnv(env: Record<string, string | undefined> = proces
     async installation(subdomain) {
       const { data, error } = await client
         .from("boundary_installations")
-        .select("subdomain, review_group_id, normal_group_id")
+        .select("subdomain, review_group_id, normal_group_id, sealed_access_token, sealed_refresh_token, token_expires_at")
         .eq("subdomain", subdomain)
         .maybeSingle();
       if (error) throw new Error("installation lookup failed");
@@ -193,7 +229,9 @@ export function databaseFromEnv(env: Record<string, string | undefined> = proces
         subdomain: String(data.subdomain),
         reviewGroupId: String(data.review_group_id),
         normalGroupId: String(data.normal_group_id),
-        sealedAccessToken: null,
+        sealedAccessToken: typeof data.sealed_access_token === "string" ? data.sealed_access_token : null,
+        sealedRefreshToken: typeof data.sealed_refresh_token === "string" ? data.sealed_refresh_token : null,
+        tokenExpiresAt: typeof data.token_expires_at === "string" ? data.token_expires_at : null,
       };
     },
     async ticket(accountId, ticketId) {
