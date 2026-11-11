@@ -8,6 +8,7 @@ import { ZendeskReadFailure, zendeskReadFailureLog } from "./zendeskRead";
 import {
   createRefreshingTransport,
   refreshSealedZendeskToken,
+  zendeskRefreshErrorCode,
   zendeskRefreshFailureLog,
 } from "./zendeskTokenRefresh";
 import { handleBoundaryWebhook, WEBHOOK_WRITES_ENABLED } from "./webhookEndpoint";
@@ -113,7 +114,8 @@ test("a rejected refresh, a storage failure, or a second 401 does not retry agai
   }
   assert.equal(rejected, null);
   assert.equal(posts, 1);
-  assert.deepEqual(lines, [[zendeskRefreshFailureLog(401)]]);
+  assert.deepEqual(lines, [[zendeskRefreshFailureLog(401, "unknown")]]);
+  assert.equal(JSON.stringify(lines).includes("invalid_token"), false);
   assert.equal(JSON.stringify(lines).includes("revoked"), false);
   assert.equal(JSON.stringify(lines).includes("refresh-token"), false);
   assert.equal(JSON.stringify(lines).includes("client-secret"), false);
@@ -324,7 +326,7 @@ test("a rejected refresh logs only its status and does not release the ticket", 
     assert.equal(payload.zendeskWrite, "disabled");
     assert.deepEqual(gets, ["expired-access"]);
     assert.deepEqual(lines, [
-      [zendeskRefreshFailureLog(400)],
+      [zendeskRefreshFailureLog(400, "invalid_grant")],
       [zendeskReadFailureLog(new ZendeskReadFailure("comments-status", 401))],
     ]);
     assert.equal(JSON.stringify(lines).includes("refresh-token"), false);
@@ -400,4 +402,57 @@ test("the refresh request uses form encoding", () => {
   assert.equal(route.includes('"content-type": "application/json"'), false);
   assert.match(refresh, /new URLSearchParams\(\{[^}]*grant_type: "refresh_token"/);
   assert.match(refresh, /scope: "read"/);
+});
+
+test("a non-200 refresh logs only an allowlisted error code", async () => {
+  const codes = [
+    "invalid_request",
+    "invalid_grant",
+    "invalid_scope",
+    "invalid_client",
+    "unauthorized_client",
+    "unsupported_grant_type",
+  ];
+  for (const code of codes) {
+    assert.equal(zendeskRefreshErrorCode({ error: code, error_description: "secret-detail", refresh_token: "secret-token" }), code);
+    assert.equal(zendeskRefreshFailureLog(400, code).includes("secret-detail"), false);
+  }
+  assert.equal(zendeskRefreshErrorCode(null), "unknown");
+  assert.equal(zendeskRefreshErrorCode("invalid_grant"), "unknown");
+  assert.equal(zendeskRefreshErrorCode({ error: "invalid_token", error_description: "revoked" }), "unknown");
+  assert.equal(zendeskRefreshErrorCode({ error: ["invalid_grant"] }), "unknown");
+  assert.equal(zendeskRefreshErrorCode({ error_description: "revoked" }), "unknown");
+  assert.equal(zendeskRefreshFailureLog(400, "not-a-code"), zendeskRefreshFailureLog(400, "unknown"));
+  assert.equal(zendeskRefreshFailureLog(null).includes("error"), false);
+
+  const database = new MemoryBoundaryDatabase();
+  await installation(database);
+  const expected = (await database.getInstallation("example"))?.sealedRefreshToken ?? "";
+  const lines: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    lines.push(args);
+  };
+  try {
+    const rejected = await refreshSealedZendeskToken({
+      subdomain: "example",
+      expectedSealedRefreshToken: expected,
+      database,
+      tokenKey: KEY,
+      clientId: "calmline-client",
+      clientSecret: "client-secret",
+      transport: async (request) => {
+        const form = new URLSearchParams(request.body);
+        assert.equal(form.get("scope"), "read");
+        assert.equal(form.get("grant_type"), "refresh_token");
+        return { status: 400, body: { error: "invalid_scope", error_description: "do-not-log", access_token: "do-not-log-token" } };
+      },
+    });
+    assert.equal(rejected, null);
+    assert.deepEqual(lines, [[zendeskRefreshFailureLog(400, "invalid_scope")]]);
+    assert.equal(JSON.stringify(lines).includes("do-not-log"), false);
+    assert.equal(openSecret((await database.getInstallation("example"))?.sealedRefreshToken ?? "", KEY), "refresh-token");
+  } finally {
+    console.error = original;
+  }
 });
