@@ -76,7 +76,7 @@ export async function refreshZendeskAccessToken(input: {
   clientSecret: string;
   transport: OauthTransport;
   now?: Date;
-}): Promise<{ accessToken: string; refreshToken: string; expiresAt: string | null }> {
+}): Promise<{ accessToken: string; refreshToken: string; expiresAt: string | null; scope: string | null }> {
   const subdomain = assertSubdomain(input.subdomain);
   if (!input.refreshToken.trim() || !input.clientId.trim() || !input.clientSecret) {
     throw new ZendeskRefreshFailure(null, null, "refresh-request");
@@ -86,7 +86,6 @@ export async function refreshZendeskAccessToken(input: {
     refresh_token: input.refreshToken,
     client_id: input.clientId,
     client_secret: input.clientSecret,
-    scope: "read",
   });
   const response = await input.transport({
     url: `https://${subdomain}.zendesk.com/oauth/tokens`,
@@ -101,8 +100,7 @@ export async function refreshZendeskAccessToken(input: {
     );
   }
   const record = response.body as { access_token?: unknown; refresh_token?: unknown; scope?: unknown; expires_in?: unknown };
-  const scope = typeof record.scope === "string" ? record.scope : "read";
-  if (scope !== "read" || typeof record.access_token !== "string" || !record.access_token || typeof record.refresh_token !== "string" || !record.refresh_token) {
+  if (typeof record.access_token !== "string" || !record.access_token || typeof record.refresh_token !== "string" || !record.refresh_token) {
     throw new ZendeskRefreshFailure(response.status, null, "refresh-validation");
   }
   const expiresIn = typeof record.expires_in === "number" ? record.expires_in : null;
@@ -111,6 +109,7 @@ export async function refreshZendeskAccessToken(input: {
     accessToken: record.access_token,
     refreshToken: record.refresh_token,
     expiresAt: expiresIn === null ? null : new Date(now.getTime() + expiresIn * 1000).toISOString(),
+    scope: typeof record.scope === "string" ? record.scope : null,
   };
 }
 
@@ -155,11 +154,27 @@ export async function refreshSealedZendeskToken(input: {
       sealedRefreshToken,
       tokenExpiresAt: refreshed.expiresAt,
     });
-    if (saved) return refreshed.accessToken;
-    const current = await input.database.getInstallation(input.subdomain);
-    if (!current?.sealedAccessToken) return null;
-    return openSecret(current.sealedAccessToken, input.tokenKey);
+    if (!saved) {
+      const current = await input.database.getInstallation(input.subdomain);
+      if (!current?.sealedAccessToken) return null;
+      return openSecret(current.sealedAccessToken, input.tokenKey);
+    }
+    if (refreshed.scope !== null && refreshed.scope !== "read") {
+      console.error(zendeskRefreshFailureLog(200, null, "refresh-validation"));
+      return null;
+    }
+    return refreshed.accessToken;
   } catch (error) {
+    if (error instanceof ZendeskRefreshFailure && error.error === "invalid_grant") {
+      try {
+        const current = await input.database.getInstallation(input.subdomain);
+        if (current?.sealedAccessToken && current.sealedRefreshToken && current.sealedRefreshToken !== input.expectedSealedRefreshToken) {
+          return openSecret(current.sealedAccessToken, input.tokenKey);
+        }
+      } catch {
+        // The original invalid_grant is logged below when no newer token is available.
+      }
+    }
     const failure = error instanceof ZendeskRefreshFailure ? error : null;
     const loggedReason = failure?.reason ?? reason;
     const status = failure ? failure.status : loggedReason === "refresh-seal" || loggedReason === "refresh-storage" ? 200 : null;
