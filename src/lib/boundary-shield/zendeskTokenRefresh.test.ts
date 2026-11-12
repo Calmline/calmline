@@ -114,7 +114,7 @@ test("a rejected refresh, a storage failure, or a second 401 does not retry agai
   }
   assert.equal(rejected, null);
   assert.equal(posts, 1);
-  assert.deepEqual(lines, [[zendeskRefreshFailureLog(401, "unknown")]]);
+  assert.deepEqual(lines, [[zendeskRefreshFailureLog(401, "unknown", "refresh-validation")]]);
   assert.equal(JSON.stringify(lines).includes("invalid_token"), false);
   assert.equal(JSON.stringify(lines).includes("revoked"), false);
   assert.equal(JSON.stringify(lines).includes("refresh-token"), false);
@@ -147,8 +147,9 @@ test("a rejected refresh, a storage failure, or a second 401 does not retry agai
     console.error = storageLog;
   }
   assert.equal(unsaved, null);
-  assert.deepEqual(storageLines, [[zendeskRefreshFailureLog(null)]]);
+  assert.deepEqual(storageLines, [[zendeskRefreshFailureLog(200, null, "refresh-storage")]]);
   assert.equal(JSON.stringify(storageLines).includes("should-not-store"), false);
+  assert.equal(JSON.stringify(storageLines).includes("OAuth token storage failed"), false);
   assert.equal(openSecret((await database.getInstallation("example"))?.sealedAccessToken ?? "", KEY), "expired-access");
 
   const sends: string[] = [];
@@ -326,7 +327,7 @@ test("a rejected refresh logs only its status and does not release the ticket", 
     assert.equal(payload.zendeskWrite, "disabled");
     assert.deepEqual(gets, ["expired-access"]);
     assert.deepEqual(lines, [
-      [zendeskRefreshFailureLog(400, "invalid_grant")],
+      [zendeskRefreshFailureLog(400, "invalid_grant", "refresh-validation")],
       [zendeskReadFailureLog(new ZendeskReadFailure("comments-status", 401))],
     ]);
     assert.equal(JSON.stringify(lines).includes("refresh-token"), false);
@@ -449,8 +450,87 @@ test("a non-200 refresh logs only an allowlisted error code", async () => {
       },
     });
     assert.equal(rejected, null);
-    assert.deepEqual(lines, [[zendeskRefreshFailureLog(400, "invalid_scope")]]);
+    assert.deepEqual(lines, [[zendeskRefreshFailureLog(400, "invalid_scope", "refresh-validation")]]);
     assert.equal(JSON.stringify(lines).includes("do-not-log"), false);
+    assert.equal(openSecret((await database.getInstallation("example"))?.sealedRefreshToken ?? "", KEY), "refresh-token");
+  } finally {
+    console.error = original;
+  }
+});
+
+test("each refresh failure records only its allowlisted stage", async () => {
+  const database = new MemoryBoundaryDatabase();
+  await installation(database);
+  const expected = (await database.getInstallation("example"))?.sealedRefreshToken ?? "";
+  const lines: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    lines.push(args);
+  };
+  const base = {
+    subdomain: "example",
+    expectedSealedRefreshToken: expected,
+    database,
+    tokenKey: KEY,
+    clientId: "calmline-client",
+    clientSecret: "client-secret",
+  };
+  try {
+    assert.equal(await refreshSealedZendeskToken({
+      ...base,
+      expectedSealedRefreshToken: "not-a-sealed-token",
+      transport: async () => {
+        throw new Error("request must not be sent");
+      },
+    }), null);
+    assert.equal(await refreshSealedZendeskToken({
+      ...base,
+      transport: async () => {
+        throw new Error("connect failed secret-token");
+      },
+    }), null);
+    assert.equal(await refreshSealedZendeskToken({
+      ...base,
+      transport: async () => ({
+        status: 200,
+        body: { access_token: "accepted-access", refresh_token: "accepted-refresh", scope: "read write", expires_in: 1800 },
+      }),
+    }), null);
+    assert.equal(await refreshSealedZendeskToken({
+      ...base,
+      transport: async () => ({
+        status: 200,
+        body: { access_token: "accepted-access", refresh_token: "accepted-refresh", scope: "read", expires_in: 1800 },
+      }),
+      seal: () => {
+        throw new Error("encryption failed accepted-access");
+      },
+    }), null);
+    database.rotateSealedOAuth = async () => {
+      throw new Error("database refused sealed token");
+    };
+    assert.equal(await refreshSealedZendeskToken({
+      ...base,
+      transport: async () => ({
+        status: 200,
+        body: { access_token: "accepted-access", refresh_token: "accepted-refresh", scope: "read", expires_in: 1800 },
+      }),
+    }), null);
+    assert.deepEqual(lines, [
+      [zendeskRefreshFailureLog(null, null, "refresh-open")],
+      [zendeskRefreshFailureLog(null, null, "refresh-request")],
+      [zendeskRefreshFailureLog(200, null, "refresh-validation")],
+      [zendeskRefreshFailureLog(200, null, "refresh-seal")],
+      [zendeskRefreshFailureLog(200, null, "refresh-storage")],
+    ]);
+    const logged = JSON.stringify(lines);
+    assert.equal(logged.includes("secret-token"), false);
+    assert.equal(logged.includes("accepted-access"), false);
+    assert.equal(logged.includes("accepted-refresh"), false);
+    assert.equal(logged.includes("encryption failed"), false);
+    assert.equal(logged.includes("database refused"), false);
+    assert.equal(logged.includes("request must not be sent"), false);
+    assert.equal(openSecret((await database.getInstallation("example"))?.sealedAccessToken ?? "", KEY), "expired-access");
     assert.equal(openSecret((await database.getInstallation("example"))?.sealedRefreshToken ?? "", KEY), "refresh-token");
   } finally {
     console.error = original;

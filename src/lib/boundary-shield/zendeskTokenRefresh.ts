@@ -9,6 +9,16 @@ import type { ZendeskReadTransport } from "./zendeskRead";
 
 const REFRESH_STAGE = "refresh-status";
 
+const REFRESH_REASONS = [
+  "refresh-open",
+  "refresh-request",
+  "refresh-validation",
+  "refresh-seal",
+  "refresh-storage",
+] as const;
+
+type RefreshReason = (typeof REFRESH_REASONS)[number];
+
 const REFRESH_ERROR_CODES = [
   "invalid_request",
   "invalid_grant",
@@ -33,23 +43,28 @@ export function zendeskRefreshErrorCode(body: unknown): RefreshErrorCode | "unkn
 class ZendeskRefreshFailure extends Error {
   readonly status: number | null;
   readonly error: string | null;
+  readonly reason: RefreshReason;
 
-  constructor(status: number | null, error: string | null = null) {
+  constructor(status: number | null, error: string | null, reason: RefreshReason) {
     super("Zendesk token refresh failed");
     this.name = "ZendeskRefreshFailure";
     this.status = Number.isInteger(status) ? status : null;
     this.error = error;
+    this.reason = reason;
   }
 }
 
-export function zendeskRefreshFailureLog(status: number | null, error: string | null = null): string {
-  const record: { source: string; stage: string; status: number | null; error?: string } = {
+export function zendeskRefreshFailureLog(status: number | null, error: string | null = null, reason: string | null = null): string {
+  const record: { source: string; stage: string; status: number | null; error?: string; reason?: string } = {
     source: "boundary-shield",
     stage: REFRESH_STAGE,
     status: Number.isInteger(status) ? status : null,
   };
   if (typeof error === "string") {
     record.error = (REFRESH_ERROR_CODES as readonly string[]).includes(error) ? error : "unknown";
+  }
+  if (typeof reason === "string" && (REFRESH_REASONS as readonly string[]).includes(reason)) {
+    record.reason = reason;
   }
   return JSON.stringify(record);
 }
@@ -64,7 +79,7 @@ export async function refreshZendeskAccessToken(input: {
 }): Promise<{ accessToken: string; refreshToken: string; expiresAt: string | null }> {
   const subdomain = assertSubdomain(input.subdomain);
   if (!input.refreshToken.trim() || !input.clientId.trim() || !input.clientSecret) {
-    throw new ZendeskRefreshFailure(null);
+    throw new ZendeskRefreshFailure(null, null, "refresh-request");
   }
   const body = new URLSearchParams({
     grant_type: "refresh_token",
@@ -82,12 +97,13 @@ export async function refreshZendeskAccessToken(input: {
     throw new ZendeskRefreshFailure(
       response.status,
       response.status !== 200 ? zendeskRefreshErrorCode(response.body) : null,
+      "refresh-validation",
     );
   }
   const record = response.body as { access_token?: unknown; refresh_token?: unknown; scope?: unknown; expires_in?: unknown };
   const scope = typeof record.scope === "string" ? record.scope : "read";
   if (scope !== "read" || typeof record.access_token !== "string" || !record.access_token || typeof record.refresh_token !== "string" || !record.refresh_token) {
-    throw new ZendeskRefreshFailure(response.status);
+    throw new ZendeskRefreshFailure(response.status, null, "refresh-validation");
   }
   const expiresIn = typeof record.expires_in === "number" ? record.expires_in : null;
   const now = input.now ?? new Date();
@@ -112,10 +128,13 @@ export async function refreshSealedZendeskToken(input: {
   clientSecret: string;
   transport: OauthTransport;
   now?: Date;
+  seal?: (plain: string, key: Buffer) => string;
 }): Promise<string | null> {
   let refreshToken = "";
+  let reason: RefreshReason = "refresh-open";
   try {
     refreshToken = openSecret(input.expectedSealedRefreshToken, input.tokenKey);
+    reason = "refresh-request";
     const refreshed = await refreshZendeskAccessToken({
       subdomain: input.subdomain,
       refreshToken,
@@ -124,11 +143,16 @@ export async function refreshSealedZendeskToken(input: {
       transport: input.transport,
       now: input.now,
     });
+    reason = "refresh-seal";
+    const seal = input.seal ?? sealSecret;
+    const sealedAccessToken = seal(refreshed.accessToken, input.tokenKey);
+    const sealedRefreshToken = seal(refreshed.refreshToken, input.tokenKey);
+    reason = "refresh-storage";
     const saved = await input.database.rotateSealedOAuth({
       subdomain: input.subdomain,
       expectedSealedRefreshToken: input.expectedSealedRefreshToken,
-      sealedAccessToken: sealSecret(refreshed.accessToken, input.tokenKey),
-      sealedRefreshToken: sealSecret(refreshed.refreshToken, input.tokenKey),
+      sealedAccessToken,
+      sealedRefreshToken,
       tokenExpiresAt: refreshed.expiresAt,
     });
     if (saved) return refreshed.accessToken;
@@ -137,7 +161,9 @@ export async function refreshSealedZendeskToken(input: {
     return openSecret(current.sealedAccessToken, input.tokenKey);
   } catch (error) {
     const failure = error instanceof ZendeskRefreshFailure ? error : null;
-    console.error(zendeskRefreshFailureLog(failure?.status ?? null, failure?.error ?? null));
+    const loggedReason = failure?.reason ?? reason;
+    const status = failure ? failure.status : loggedReason === "refresh-seal" || loggedReason === "refresh-storage" ? 200 : null;
+    console.error(zendeskRefreshFailureLog(status, failure?.error ?? null, loggedReason));
     return null;
   } finally {
     refreshToken = "";
