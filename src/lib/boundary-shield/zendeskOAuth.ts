@@ -57,6 +57,37 @@ export function openSecret(sealed: string, key: Buffer): string {
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
 
+/** Zendesk's token response uses `read write` when the scope field is omitted. */
+export const OMITTED_GRANT_SCOPE = "read write";
+
+export type SealedOauthCredential = {
+  secret: string;
+  scope: string | null;
+};
+
+export function effectiveGrantedScope(scope: unknown): string {
+  return typeof scope === "string" && scope.trim() ? scope : OMITTED_GRANT_SCOPE;
+}
+
+export function sealOauthCredential(secret: string, scope: string, key: Buffer): string {
+  return sealSecret(JSON.stringify({ v: 1, secret, scope }), key);
+}
+
+export function openOauthCredential(sealed: string, key: Buffer): SealedOauthCredential {
+  const plain = openSecret(sealed, key);
+  if (plain.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(plain) as { v?: unknown; secret?: unknown; scope?: unknown };
+      if (parsed.v === 1 && typeof parsed.secret === "string" && parsed.secret && typeof parsed.scope === "string" && parsed.scope.trim()) {
+        return { secret: parsed.secret, scope: parsed.scope };
+      }
+    } catch {
+      // Older sealed values contain only the token.
+    }
+  }
+  return { secret: plain, scope: null };
+}
+
 /** Marketplace authorize URL for one Zendesk subdomain. No group id is implied. */
 export function zendeskAuthorizeUrl(input: {
   subdomain: string;
@@ -111,7 +142,7 @@ export async function exchangeAuthorizationCode(input: {
   return {
     accessToken: record.access_token,
     refreshToken: typeof record.refresh_token === "string" ? record.refresh_token : null,
-    scope: typeof record.scope === "string" ? record.scope : "read",
+    scope: effectiveGrantedScope(record.scope),
     expiresAt: expiresIn === null ? null : new Date(Date.now() + expiresIn * 1000).toISOString(),
   };
 }

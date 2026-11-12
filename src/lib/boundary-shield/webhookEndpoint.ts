@@ -2,7 +2,7 @@ import { EmailRoutingWorkflow } from "./emailRouting";
 import type { RoutingAuditEvent } from "./emailRouting";
 import type { BoundaryDatabase } from "./boundaryDatabase";
 import { MemoryRoutingStore } from "./routingStore";
-import { openSecret } from "./zendeskOAuth";
+import { openOauthCredential } from "./zendeskOAuth";
 import { ZendeskReadFailure, readZendeskComment, zendeskReadFailureLog, type ZendeskReadTransport } from "./zendeskRead";
 import { createRefreshingTransport } from "./zendeskTokenRefresh";
 import { verifyZendeskWebhookSignature } from "./zendeskWebhookSignature";
@@ -120,7 +120,9 @@ export async function handleBoundaryWebhook(request: Request, deps: WebhookDepen
     }
     let accessToken = "";
     try {
-      accessToken = openSecret(sealed, deps.tokenKey);
+      const credential = openOauthCredential(sealed, deps.tokenKey);
+      if (credential.scope !== "read") return json({ accepted: false, released: false }, 503);
+      accessToken = credential.secret;
       const remote = await reader({ subdomain: accountId, accessToken, ticketId, commentId });
       text = clean(remote.text);
       channel = clean(remote.channel) || channel;

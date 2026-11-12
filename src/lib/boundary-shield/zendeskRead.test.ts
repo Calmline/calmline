@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { MemoryBoundaryDatabase } from "./boundaryDatabase";
 import { ROUTING_WRITES_ENABLED } from "./emailRouting";
-import { sealSecret } from "./zendeskOAuth";
+import { sealOauthCredential } from "./zendeskOAuth";
 import { ZendeskReadFailure, readZendeskComment, zendeskReadFailureLog } from "./zendeskRead";
 import { handleBoundaryWebhook, WEBHOOK_WRITES_ENABLED } from "./webhookEndpoint";
 import { signZendeskWebhook } from "./zendeskWebhookSignature";
@@ -184,7 +184,7 @@ test("an identifier-only webhook retrieves the comment before screening", async 
     subdomain: "example",
     reviewGroupId: "701",
     normalGroupId: "702",
-    sealedAccessToken: sealSecret("access-token", KEY),
+    sealedAccessToken: sealOauthCredential("access-token", "read", KEY),
   });
   const body = JSON.stringify({
     account: { subdomain: "example" },
@@ -253,7 +253,7 @@ test("a failed comment lookup does not release or update the ticket", async () =
     subdomain: "example",
     reviewGroupId: "701",
     normalGroupId: "702",
-    sealedAccessToken: sealSecret("access-token", KEY),
+    sealedAccessToken: sealOauthCredential("access-token", "read", KEY),
   });
   const body = JSON.stringify({
     account: { subdomain: "example" },
@@ -291,7 +291,7 @@ test("the webhook logs the lookup stage and still does not release the ticket", 
     subdomain: "example",
     reviewGroupId: "701",
     normalGroupId: "702",
-    sealedAccessToken: sealSecret("access-token", KEY),
+    sealedAccessToken: sealOauthCredential("access-token", "read", KEY),
   });
   const body = JSON.stringify({
     account: { subdomain: "example" },

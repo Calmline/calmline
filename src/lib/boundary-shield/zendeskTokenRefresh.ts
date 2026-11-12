@@ -1,8 +1,9 @@
 import type { BoundaryDatabase } from "./boundaryDatabase";
 import {
   assertSubdomain,
-  openSecret,
-  sealSecret,
+  effectiveGrantedScope,
+  openOauthCredential,
+  sealOauthCredential,
   type OauthTransport,
 } from "./zendeskOAuth";
 import type { ZendeskReadTransport } from "./zendeskRead";
@@ -76,7 +77,7 @@ export async function refreshZendeskAccessToken(input: {
   clientSecret: string;
   transport: OauthTransport;
   now?: Date;
-}): Promise<{ accessToken: string; refreshToken: string; expiresAt: string | null; scope: string | null }> {
+}): Promise<{ accessToken: string; refreshToken: string; expiresAt: string | null; scope: string }> {
   const subdomain = assertSubdomain(input.subdomain);
   if (!input.refreshToken.trim() || !input.clientId.trim() || !input.clientSecret) {
     throw new ZendeskRefreshFailure(null, null, "refresh-request");
@@ -109,8 +110,15 @@ export async function refreshZendeskAccessToken(input: {
     accessToken: record.access_token,
     refreshToken: record.refresh_token,
     expiresAt: expiresIn === null ? null : new Date(now.getTime() + expiresIn * 1000).toISOString(),
-    scope: typeof record.scope === "string" ? record.scope : null,
+    scope: effectiveGrantedScope(record.scope),
   };
+}
+
+async function readStoredAccessToken(subdomain: string, database: BoundaryDatabase, tokenKey: Buffer): Promise<string | null> {
+  const current = await database.getInstallation(subdomain);
+  if (!current?.sealedAccessToken) return null;
+  const credential = openOauthCredential(current.sealedAccessToken, tokenKey);
+  return credential.scope === "read" ? credential.secret : null;
 }
 
 /**
@@ -132,7 +140,7 @@ export async function refreshSealedZendeskToken(input: {
   let refreshToken = "";
   let reason: RefreshReason = "refresh-open";
   try {
-    refreshToken = openSecret(input.expectedSealedRefreshToken, input.tokenKey);
+    refreshToken = openOauthCredential(input.expectedSealedRefreshToken, input.tokenKey).secret;
     reason = "refresh-request";
     const refreshed = await refreshZendeskAccessToken({
       subdomain: input.subdomain,
@@ -143,7 +151,7 @@ export async function refreshSealedZendeskToken(input: {
       now: input.now,
     });
     reason = "refresh-seal";
-    const seal = input.seal ?? sealSecret;
+    const seal = input.seal ?? ((secret: string, key: Buffer) => sealOauthCredential(secret, refreshed.scope, key));
     const sealedAccessToken = seal(refreshed.accessToken, input.tokenKey);
     const sealedRefreshToken = seal(refreshed.refreshToken, input.tokenKey);
     reason = "refresh-storage";
@@ -154,12 +162,8 @@ export async function refreshSealedZendeskToken(input: {
       sealedRefreshToken,
       tokenExpiresAt: refreshed.expiresAt,
     });
-    if (!saved) {
-      const current = await input.database.getInstallation(input.subdomain);
-      if (!current?.sealedAccessToken) return null;
-      return openSecret(current.sealedAccessToken, input.tokenKey);
-    }
-    if (refreshed.scope !== null && refreshed.scope !== "read") {
+    if (!saved) return readStoredAccessToken(input.subdomain, input.database, input.tokenKey);
+    if (refreshed.scope !== "read") {
       console.error(zendeskRefreshFailureLog(200, null, "refresh-validation"));
       return null;
     }
@@ -169,7 +173,8 @@ export async function refreshSealedZendeskToken(input: {
       try {
         const current = await input.database.getInstallation(input.subdomain);
         if (current?.sealedAccessToken && current.sealedRefreshToken && current.sealedRefreshToken !== input.expectedSealedRefreshToken) {
-          return openSecret(current.sealedAccessToken, input.tokenKey);
+          const credential = openOauthCredential(current.sealedAccessToken, input.tokenKey);
+          if (credential.scope === "read") return credential.secret;
         }
       } catch {
         // The original invalid_grant is logged below when no newer token is available.

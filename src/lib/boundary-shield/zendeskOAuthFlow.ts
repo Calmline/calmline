@@ -1,7 +1,7 @@
 import type { BoundaryDatabase } from "./boundaryDatabase";
 import {
   exchangeAuthorizationCode,
-  sealSecret,
+  sealOauthCredential,
   type OauthTransport,
 } from "./zendeskOAuth";
 import { oauthStateMatches, parseOAuthStateValue } from "./zendeskOAuthState";
@@ -31,8 +31,8 @@ export async function completeOAuthExchange(input: {
   if (!token || token.scope !== "read") return "rejected";
   await input.database.storeSealedOAuth({
     subdomain: cookie.subdomain,
-    sealedAccessToken: sealSecret(token.accessToken, input.tokenKey),
-    sealedRefreshToken: token.refreshToken ? sealSecret(token.refreshToken, input.tokenKey) : null,
+    sealedAccessToken: sealOauthCredential(token.accessToken, token.scope, input.tokenKey),
+    sealedRefreshToken: token.refreshToken ? sealOauthCredential(token.refreshToken, token.scope, input.tokenKey) : null,
     tokenExpiresAt: token.expiresAt,
   });
   return "stored";

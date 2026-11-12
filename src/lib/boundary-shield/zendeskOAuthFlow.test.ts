@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { MemoryBoundaryDatabase } from "./boundaryDatabase";
-import { exchangeAuthorizationCode, openSecret, sealSecret, zendeskAuthorizeUrl } from "./zendeskOAuth";
+import { exchangeAuthorizationCode, openOauthCredential, sealSecret, zendeskAuthorizeUrl } from "./zendeskOAuth";
 import { completeOAuthExchange } from "./zendeskOAuthFlow";
 import {
   createOAuthState,
@@ -72,8 +72,10 @@ test("the callback rejects a mismatched state and stores only sealed tokens", as
   const sealed = installation?.sealedAccessToken ?? "";
   assert.equal(sealed.includes("raw-access-token"), false);
   assert.equal(sealed.includes("raw-refresh-token"), false);
-  assert.equal(openSecret(sealed, KEY), "raw-access-token");
-  assert.equal(openSecret(installation?.sealedRefreshToken ?? "", KEY), "raw-refresh-token");
+  assert.equal(openOauthCredential(sealed, KEY).secret, "raw-access-token");
+  assert.equal(openOauthCredential(sealed, KEY).scope, "read");
+  assert.equal(openOauthCredential(installation?.sealedRefreshToken ?? "", KEY).secret, "raw-refresh-token");
+  assert.equal(openOauthCredential(installation?.sealedRefreshToken ?? "", KEY).scope, "read");
 
   const mismatched = await completeOAuthExchange({
     code: "another-code",
