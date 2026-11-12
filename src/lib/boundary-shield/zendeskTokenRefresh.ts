@@ -93,10 +93,11 @@ export async function refreshZendeskAccessToken(input: {
     method: "POST",
     body: body.toString(),
   });
-  if (response.status !== 200 || !response.body || typeof response.body !== "object") {
+  const succeeded = response.status === 200 || response.status === 201;
+  if (!succeeded || !response.body || typeof response.body !== "object" || Array.isArray(response.body)) {
     throw new ZendeskRefreshFailure(
       response.status,
-      response.status !== 200 ? zendeskRefreshErrorCode(response.body) : null,
+      succeeded ? null : zendeskRefreshErrorCode(response.body),
       "refresh-validation",
     );
   }

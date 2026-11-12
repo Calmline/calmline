@@ -93,6 +93,67 @@ test("a 401 refreshes once, stores both rotated tokens, and retries the same GET
   assert.equal(JSON.stringify(saved).includes("fresh-access"), false);
 });
 
+test("an HTTP 201 refresh is saved and a malformed token response is not", async () => {
+  const database = new MemoryBoundaryDatabase();
+  await installation(database);
+  const expected = (await database.getInstallation("example"))?.sealedRefreshToken ?? "";
+  const calls: string[] = [];
+  const response = await createRefreshingTransport({
+    send: async (request) => {
+      calls.push(request.token);
+      return request.token === "created-access" ? { status: 200, body: { comments: [] } } : { status: 401, body: {} };
+    },
+    rotate: () => refreshSealedZendeskToken({
+      subdomain: "example",
+      expectedSealedRefreshToken: expected,
+      database,
+      tokenKey: KEY,
+      clientId: "calmline-client",
+      clientSecret: "client-secret",
+      now: NOW,
+      transport: async () => ({
+        status: 201,
+        body: { access_token: "created-access", refresh_token: "created-refresh", scope: "read", expires_in: 1800 },
+      }),
+    }),
+  })({ method: "GET", url: "https://example.zendesk.com/api/v2/tickets/4/comments.json", token: "expired-access" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, ["expired-access", "created-access"]);
+  const saved = await database.getInstallation("example");
+  assert.equal(token(saved?.sealedAccessToken ?? ""), "created-access");
+  assert.equal(token(saved?.sealedRefreshToken ?? ""), "created-refresh");
+  assert.equal(granted(saved?.sealedAccessToken ?? ""), "read");
+  assert.equal(saved?.tokenExpiresAt, "2026-11-11T18:30:00.000Z");
+  assert.equal(JSON.stringify(saved).includes("created-access"), false);
+
+  const unchanged = new MemoryBoundaryDatabase();
+  await installation(unchanged);
+  const lines: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    lines.push(args);
+  };
+  try {
+    const malformed = await refreshSealedZendeskToken({
+      subdomain: "example",
+      expectedSealedRefreshToken: (await unchanged.getInstallation("example"))?.sealedRefreshToken ?? "",
+      database: unchanged,
+      tokenKey: KEY,
+      clientId: "calmline-client",
+      clientSecret: "client-secret",
+      transport: async () => ({ status: 201, body: { access_token: "created-access" } }),
+    });
+    assert.equal(malformed, null);
+    assert.deepEqual(lines, [[zendeskRefreshFailureLog(201, null, "refresh-validation")]]);
+    assert.equal(JSON.stringify(lines).includes("created-access"), false);
+    assert.equal(token((await unchanged.getInstallation("example"))?.sealedAccessToken ?? ""), "expired-access");
+    assert.equal(WEBHOOK_WRITES_ENABLED, false);
+    assert.equal(ROUTING_WRITES_ENABLED, false);
+  } finally {
+    console.error = original;
+  }
+});
+
 test("a rejected refresh, a storage failure, or a second 401 does not retry again", async () => {
   const database = new MemoryBoundaryDatabase();
   await installation(database);
